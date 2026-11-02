@@ -60,6 +60,12 @@ You need:
 - **A domain whose DNS is on Cloudflare** (free plan is enough). If the
   domain's DNS is elsewhere, Cloudflare's "Add a site" moves it; your website
   and mailboxes can stay where they are, only the nameservers change.
+  **Before you switch the nameservers**, look at the records Cloudflare
+  imported: the **A** records arrive **Proxied** (orange cloud). Click
+  **Edit** on each and set it to **DNS only** (grey cloud). A proxied `*` or
+  `mail` record breaks the existing mailboxes, because Cloudflare's proxy
+  carries web traffic only. MX and TXT records cannot be proxied and are fine
+  as imported.
 - **A VPS** with Ubuntu 24.04 LTS, 2 GB RAM, 20 GB disk, in the EU, and your
   SSH key on it.
 - **Accounts** at [Brevo](https://www.brevo.com/) and
@@ -80,6 +86,12 @@ run hardened servers, skim the checklist at the end of this step and move on.
 **Keep the provider's web console open in a browser tab.** Two steps change
 how you log in; if one goes wrong, the console is the way back. **Test every
 SSH change in a new terminal before closing the old one.**
+
+**Paste blocks that end in `EOF` whole.** A command like
+`sudo tee <file> > /dev/null <<'EOF'` spans several lines, and everything up
+to the line that says just `EOF` becomes the file. Paste only the first line
+and the shell waits with a `>` prompt; Ctrl+C cancels without writing
+anything. Copy the whole block, `EOF` included, and paste it in one go.
 
 ### 2.1 Updates, clock, swap
 
@@ -108,7 +120,9 @@ chmod 700 /home/deploy/.ssh && chmod 600 /home/deploy/.ssh/authorized_keys
 ```
 
 **In a new terminal:** `ssh deploy@<server ip>`, then `sudo whoami` prints
-`root`. Only then continue, as `deploy`.
+`root`. Only then continue, as `deploy`. If your `~/.ssh/config` on your own
+computer has `User root` for this server, change it to `User deploy` now:
+after step 2.3, root cannot log in at all.
 
 ### 2.3 SSH: keys only, no root
 
@@ -228,13 +242,23 @@ In the Cloudflare dashboard → **R2 Object Storage**:
 1. **Create bucket** `szamlazo-invoices`. Location: **Specify jurisdiction →
    European Union**. Invoices are personal data; this keeps them in the EU.
 2. **Create bucket** `szamlazo-backups`, also in the EU jurisdiction.
-3. **Manage API tokens → Create API token**:
-   - Name `szamlazo-server`, permission **Object Read & Write**, **Apply to
-     specific buckets only** → `szamlazo-invoices`. Create, and copy the
-     **Access Key ID**, **Secret Access Key**, and the **EU** S3 endpoint
-     (`https://<account id>.eu.r2.cloudflarestorage.com`). They are shown once.
-   - Again: `szamlazo-backup`, **Object Read & Write**, only
-     `szamlazo-backups`. Copy its keys too.
+3. Back on the R2 overview page, **Manage API tokens**. The page has two
+   sections, **Account API Tokens** and **User API Tokens**. Use **Create
+   Account API token**, the top one: it belongs to the Cloudflare account, so
+   it keeps working if your own user ever changes. (A User API token stops
+   when that user leaves the account.)
+   - Token name `szamlazo-server`. **Permissions:** Object Read & Write.
+     **Specify bucket(s):** Apply to specific buckets only →
+     `szamlazo-invoices`. **TTL:** Forever. Create.
+   - The result page shows several values; you need three, and they are
+     shown once: **Access Key ID**, **Secret Access Key**, and the S3
+     endpoint. If two endpoints are listed, take the **EU** one, with `.eu.`
+     in it (`https://<account id>.eu.r2.cloudflarestorage.com`), because the
+     bucket is in the EU jurisdiction. The **Token value** above them is for
+     Cloudflare's own API and is not used here.
+   - Again for the backups: **Create Account API token**, name
+     `szamlazo-backup`, Object Read & Write, only `szamlazo-backups`. Copy its
+     three values too.
 
 Optional, recommended: on `szamlazo-invoices` → **Settings → Bucket lock
 rules**, add a rule retaining every object for 8 years. Then not even a
@@ -260,14 +284,23 @@ corner of the Brevo dashboard.
    Brevo shows it. Two Cloudflare traps:
    - For the DKIM **CNAME** records, switch **Proxy status** off (grey cloud,
      "DNS only"). Proxied, DKIM fails.
-   - If you already have a DMARC record (`_dmarc`), edit it instead of adding
-     a second one.
+   - If you already have a DMARC record (`_dmarc`), **edit it** and paste
+     Brevo's value (it adds a `rua=` part, so Brevo receives the reports)
+     instead of adding a second one. Until then Brevo shows "The DMARC values
+     in Brevo and in your domain provider account mismatch".
+   - If Brevo also lists an **SPF** record and you already have one
+     (`v=spf1 …`), merge Brevo's `include:` into the existing record. A
+     domain must have exactly one SPF record; two make both fail.
 4. Back in Brevo, click **Authenticate this email domain**. It usually works
    within minutes; DNS can take up to 48 hours.
 
 **5.2 The sender.** Account dropdown → **Settings → Senders, Domains, IPs →
 Senders → Add sender**: for example `szamla@example.hu`, with your business
 name. This address is `EMAIL_FROM` in step 8.
+
+Brevo then offers **"Brand your domain for better deliverability"**. Click
+**Skip for now**: branding only changes tracking links in marketing emails,
+and szamlazo's emails are plain text with no tracking.
 
 **5.3 The API key.** Account dropdown → **SMTP & API → API keys** tab →
 **Generate a new API key**, name `szamlazo`, **Generate**. Copy it now
@@ -311,9 +344,10 @@ Cloudflare dashboard → **Zero Trust → Networks → Tunnels → Create a tunn
 2. On the install page, choose **Docker**. Copy only the long token after
    `--token` in the command shown. Do not run the command; Compose runs
    cloudflared. The token goes in `deploy/.env` in step 8.
-3. **Next**. Add a public hostname (in newer dashboards: **Published
-   application routes**): subdomain `szamlazo`, your domain, service type
-   **HTTP**, URL `server:3000`. Save.
+3. **Next**. Add a public hostname (newer dashboards call it a **Published
+   application route**): subdomain `szamlazo`, your domain from the list,
+   service type **HTTP**, URL `server:3000`. Save. Cloudflare creates the DNS
+   record itself; it shows in your DNS list with type **Tunnel**.
 
 The token can run this one tunnel and nothing else; it cannot change your DNS.
 
@@ -324,12 +358,23 @@ Service Token**: name `webshop`, duration **Non-expiring** (or a year, with a
 calendar reminder). Copy the **Client ID** and **Client Secret**; the secret is
 shown once. Make one per client.
 
-Zero Trust → **Access → Applications → Add an application → Self-hosted**:
+Zero Trust → **Access → Applications → Add an application**. The dialog
+opens on the **Self-hosted and private** tab, with example diagrams below
+(Private destinations, Workers, Public DNS, Service auth). Those are only
+illustrations; click **Continue with Self-hosted and private**. Then:
 
-1. Name `szamlazo`, domain `szamlazo.example.hu`, no path.
-2. Policy: name `clients`, action **Service Auth**, include **Service Token** →
-   `webshop` (and any others).
-3. Save.
+1. **Application name:** `szamlazo`.
+2. **Public hostnames:** Subdomain `szamlazo`, Domain: pick yours from the
+   list, Path: leave empty. Do not use "Add private hostname", "Add private
+   IP" or "Add Workers", and leave **browser-based RDP, SSH, or VNC** off.
+3. **Access policies → Create new policy:** name `clients`, Action **Service
+   Auth**, Add rule → Include → selector **Service Token**, value `webshop`
+   (and any others). Save the policy and make sure it is attached to the
+   application.
+4. Save the application.
+
+Zero Trust asks for a team name and a plan the first time you open it; the
+**Free** plan covers everything here.
 
 Check, from your computer:
 
@@ -337,8 +382,8 @@ Check, from your computer:
 $ curl -s -o /dev/null -w '%{http_code}\n' https://szamlazo.example.hu/health
 ```
 
-`403` from Cloudflare, before the server is even running. That is Access doing
-its job. With the token it will be `200` once step 9 is done:
+Anything but `200` (Cloudflare answers `302`, a redirect to its login page, or
+`403`), before the server is even running. That is Access doing its job. With the token it will be `200` once step 9 is done:
 
 ```sh
 $ curl -s https://szamlazo.example.hu/health \
@@ -472,12 +517,17 @@ Cloudflare (step 6.2's command): `{"status":"ok","database":"ok"}`.
 The server emails you about everything it notices. Healthchecks.io covers
 what it cannot notice: itself being down.
 
-In Healthchecks.io, **Add Check** twice:
+In Healthchecks.io, **Add Check** twice. A new account starts with an example
+check called "My First Check", which never pings; delete it.
 
-| Check | Period | Grace | URL goes to |
+| Check | Schedule | Grace | Ping URL goes to |
 |---|---|---|---|
-| `szamlazo checker` | 5 minutes | 30 minutes | `HEALTHCHECK_URL` in `szamlazo.env` |
-| `szamlazo backup` | 1 day | 2 hours | `BACKUP_HEALTHCHECK_URL` in `backup.env` (step 11) |
+| `szamlazo checker` | Simple, period 5 minutes | 15 minutes | `HEALTHCHECK_URL` in `szamlazo.env` |
+| `szamlazo backup` | **Cron** `15 2 * * *`, time zone UTC | 2 hours | `BACKUP_HEALTHCHECK_URL` in `backup.env` (step 11) |
+
+The backup check uses a cron schedule matching the crontab line in step 11,
+so Healthchecks knows exactly when a backup is due rather than "once a day".
+Each check's **Ping URL** (`https://hc-ping.com/<uuid>`) is in the list.
 
 The server pings after every checker pass, and pings `/fail` when a pass
 fails. If the server stops, hangs, loses its database or the VPS goes away,

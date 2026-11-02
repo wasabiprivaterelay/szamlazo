@@ -25,6 +25,11 @@ You need about twenty minutes, and:
    and choose **Belépés** (Login).
 2. Under **Elsődleges felhasználó** (primary user), choose
    **Bejelentkezés KAÜ-vel** and identify yourself with Ügyfélkapu+ or DÁP.
+   NAV then shows **Elérhető alkalmazások**, four cards each marked "Teszt
+   környezet": **online számla**, **online számlázó program**, **eÁFA** and
+   **DACentral**. Click **TOVÁBB** on the first one, **online számla** (green).
+   The others are NAV's free invoicing program, VAT returns and EU data
+   exchange.
 3. Give your email address and phone number, accept the privacy notice, and
    save.
 4. If you can act for several taxpayers, pick the one you will invoice as.
@@ -38,10 +43,18 @@ invoices and nothing else; it cannot log in to the portal.
 
 1. Top menu: **Felhasználók** (Users) → **Új felhasználó** (New user).
 2. Choose **Technikai felhasználó** → **Létrehozás**.
-3. Set a password. Use a long random one, for example from
-   `openssl rand -base64 24`, and keep it in your password manager.
-4. Permissions: tick **Számlák kezelése** (manage invoices) and
-   **Számlák lekérdezése** (query invoices). Nothing else is needed. Save.
+3. NAV generates the **login** itself (15 random characters; it cannot be
+   changed later). You set the **password**: use a long random one, for
+   example from `openssl rand -base64 24`, and keep both in your password
+   manager.
+4. Under **Jogosultságok beállítása** (permissions) there are seven boxes.
+   Tick exactly two, both next to the online számla logo:
+   - **Számlák kezelése** (report invoices)
+   - **Számlák lekérdezése** (query invoices)
+
+   Leave the rest unticked: *Saját számlák lekérdezése*, the eÁFA,
+   OPG napló, DACentral and NYUGTA boxes belong to other systems and give a
+   leaked key more power for nothing. Then **MENTÉS**.
 5. Choose **Kulcsgenerálás** (generate keys). NAV shows the
    **XML aláírókulcs** (signing key) and **XML cserekulcs** (exchange key).
 

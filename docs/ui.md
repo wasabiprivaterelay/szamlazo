@@ -23,8 +23,20 @@ browser ──▶ Cloudflare Access ──▶ tunnel ──▶ server
    service `server:3000`).
 2. **A Cloudflare Access application** for it with an **Allow** policy (not
    Service Auth) that includes the named people's email addresses, logging in
-   with a one-time PIN by email or your Google Workspace. Session duration: a
-   working day.
+   with a one-time PIN by email. Session duration: a working day. Three
+   things in the dashboard that are easy to get wrong:
+   - **Set up One-time PIN first.** Out of the box the team's only login
+     method is "Cloudflare", which asks people for a Cloudflare account they
+     don't have. Zero Trust → **Settings → Authentication** (newer
+     dashboards: **Integrations → Identity providers**) → **Add new →
+     One-time PIN**. It needs no settings.
+   - **On the application**, in **Authentication**: turn **Accept all
+     available identity providers** off, choose **One-time PIN** only, and
+     turn **Apply instant authentication** on, so it goes straight to "enter
+     your email".
+   - **In the policy**, Include → selector **Emails**, then each address as
+     its own entry. Not **Emails ending in**: `gmail.com` there would let in
+     every Gmail user.
 3. **The server verifies Access itself.** Cloudflare adds a signed JWT to
    every request it lets through (`Cf-Access-Jwt-Assertion`). The server checks
    its signature against
