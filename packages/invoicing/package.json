@@ -30,7 +30,7 @@
   },
   "devDependencies": {
     "@types/fontkit": "^2.0.9",
-    "@types/pdfmake": "^0.2.11",
+    "@types/pdfmake": "^0.3.3",
     "fontkit": "^2.0.4",
     "vitest": "^5.0.5"
   }
