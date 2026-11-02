@@ -260,10 +260,23 @@ In the Cloudflare dashboard → **R2 Object Storage**:
      `szamlazo-backup`, Object Read & Write, only `szamlazo-backups`. Copy its
      three values too.
 
-Optional, recommended: on `szamlazo-invoices` → **Settings → Bucket lock
-rules**, add a rule retaining every object for 8 years. Then not even a
-leaked token can delete an invoice before the law lets you. Add it after the
-first successful invoice, so test files are not locked in.
+Optional, recommended: a **bucket lock**, so not even a leaked token can
+delete or overwrite an invoice before the law lets you. Open
+`szamlazo-invoices` → **Settings** tab → scroll to **Bucket lock rules** →
+**Add rule**:
+
+- **Rule name:** `invoices-8-years`
+- **Prefix:** `invoices/`. This matters: the server writes and deletes a
+  small test file under `probe/` every time it starts, to prove the storage
+  works. A rule without a prefix locks that file too, and the server then
+  refuses to start.
+- **Retention:** lock for a specific duration, **3000 days** (eight years with
+  a margin).
+- **Save changes.**
+
+Add it after your first real invoice, so test files are not locked in for
+eight years. The server never overwrites a PDF (each file name carries a
+piece of the PDF's own fingerprint), so the lock never gets in its way.
 
 Check: nothing to check yet; `doctor` in step 9 writes and reads a probe file.
 
@@ -338,27 +351,32 @@ reaches the server.
 
 ### 6.1 The tunnel
 
-Cloudflare dashboard → **Zero Trust → Networks → Tunnels → Create a tunnel**:
+Cloudflare dashboard → **Networking → Tunnels** (inside Zero Trust the same
+page is under **Networks → Tunnels**) → **Create a tunnel**:
 
-1. Type **Cloudflared**, name `szamlazo`, **Save tunnel**.
-2. On the install page, choose **Docker**. Copy only the long token after
-   `--token` in the command shown. Do not run the command; Compose runs
-   cloudflared. The token goes in `deploy/.env` in step 8.
-3. **Next**. Add a public hostname (newer dashboards call it a **Published
-   application route**): subdomain `szamlazo`, your domain from the list,
-   service type **HTTP**, URL `server:3000`. Save. Cloudflare creates the DNS
-   record itself; it shows in your DNS list with type **Tunnel**.
+1. Name `szamlazo` → **Create Tunnel**.
+2. The next page shows install commands for each environment; choose
+   **Docker**. Every command ends in `--token` followed by a long string:
+   copy only that string. **Do not run the command**: Compose runs cloudflared
+   for you. The token goes in `deploy/.env` in step 8. The tunnel shows as
+   inactive until then; that is expected.
+3. Open the tunnel → **Routes** tab → **Add route** → **Published
+   application**. Subdomain `szamlazo`, **Domain** from the drop-down, path
+   empty, **Service URL** `http://server:3000` (`server` is the container's
+   name inside Docker, not `localhost`). **Add route**. Cloudflare creates the
+   DNS record itself; it shows in your DNS list with type **Tunnel**.
 
 The token can run this one tunnel and nothing else; it cannot change your DNS.
 
 ### 6.2 Access: only your clients get through
 
-Zero Trust → **Access → Service credentials → Service Tokens → Create
-Service Token**: name `webshop`, duration **Non-expiring** (or a year, with a
+Zero Trust → **Access controls** (older dashboards: **Access**) → **Service
+credentials → Service Tokens → Create Service Token**: name `webshop`, duration **Non-expiring** (or a year, with a
 calendar reminder). Copy the **Client ID** and **Client Secret**; the secret is
 shown once. Make one per client.
 
-Zero Trust → **Access → Applications → Add an application**. The dialog
+Zero Trust → **Access controls** (older dashboards: **Access**) →
+**Applications → Add an application**. The dialog
 opens on the **Self-hosted and private** tab, with example diagrams below
 (Private destinations, Workers, Public DNS, Service auth). Those are only
 illustrations; click **Continue with Self-hosted and private**. Then:

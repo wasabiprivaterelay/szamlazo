@@ -22,16 +22,24 @@ export function sha256Of(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-/** invoices/2026/SZ2026-00042.pdf: the year first, so a folder stays small. */
-export function invoicePath(invoiceNumber: string, year: number): string {
+/**
+ * invoices/2026/SZ2026-00042-3f1c9a0b7e2d.pdf: the year first, so a folder
+ * stays small, and the start of the PDF's own SHA-256 last, so a path is
+ * never written twice with different bytes. That matters when an issue fails
+ * after its PDF was stored: the number is given back, and the next invoice
+ * with that number writes a new file instead of overwriting the old one,
+ * which a bucket lock (docs/production.md, step 4) would refuse.
+ */
+export function invoicePath(invoiceNumber: string, year: number, sha256: string): string {
   if (!/^[A-Z]{1,8}\d{4}\/\d+$/.test(invoiceNumber)) {
     throw new Error(`not an invoice number this server issues: ${invoiceNumber}`);
   }
-  return `invoices/${year}/${invoiceNumber.replace("/", "-")}.pdf`;
+  if (!/^[a-f0-9]{64}$/.test(sha256)) throw new Error("invoicePath needs the PDF's SHA-256");
+  return `invoices/${year}/${invoiceNumber.replace("/", "-")}-${sha256.slice(0, 12)}.pdf`;
 }
 
 /** Only the paths invoicePath makes, so nothing outside the store can be named. */
-const SAFE_PATH = /^(invoices\/\d{4}\/[A-Z]{1,8}\d{4}-\d+\.pdf|probe\/[a-f0-9]{16}\.txt)$/;
+const SAFE_PATH = /^(invoices\/\d{4}\/[A-Z]{1,8}\d{4}-\d+-[a-f0-9]{12}\.pdf|probe\/[a-f0-9]{16}\.txt)$/;
 
 function checkPath(path: string): void {
   if (!SAFE_PATH.test(path)) throw new Error(`refusing an unexpected storage path: ${JSON.stringify(path)}`);

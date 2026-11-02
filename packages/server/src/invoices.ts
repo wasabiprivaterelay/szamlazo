@@ -18,7 +18,7 @@ import type { Database, Transaction } from "./db/client.js";
 import { auditLog, invoices } from "./db/schema.js";
 import { sequenceSourceFor } from "./db/sequence.js";
 import { addDays, day, dayOf, isoDay } from "./dates.js";
-import { invoicePath, type InvoiceStore } from "./storage.js";
+import { invoicePath, sha256Of, type InvoiceStore } from "./storage.js";
 
 /**
  * Issuing invoices and reversing them. Everything for one invoice happens in
@@ -235,7 +235,7 @@ async function storeAndRecord(
   // Stored before the row is written, so a row never points at a file that is
   // not there. A transaction that fails later leaves an unreferenced file,
   // which the next invoice drawing the same number overwrites.
-  const stored = await store.put(invoicePath(invoice.invoiceNumber, yearOf(invoice.issueDate)), pdf);
+  const stored = await store.put(invoicePath(invoice.invoiceNumber, yearOf(invoice.issueDate), sha256Of(pdf)), pdf);
 
   const [inserted] = await tx
     .insert(invoices)

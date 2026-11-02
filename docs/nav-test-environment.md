@@ -149,7 +149,7 @@ npm run szamlazo -- test-invoice --email you@example.com   # also emails it, if 
 ```
 
 ```
-issued SZ2026/00002: gross 13040 Ft, PDF at invoices/2026/SZ2026-00002.pdf
+issued SZ2026/00002: gross 13040 Ft, PDF at invoices/2026/SZ2026-00002-6e1f0c2a9b3d.pdf
 reporting it to NAV's test system …
 NAV: accepted
 ```

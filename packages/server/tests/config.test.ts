@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { ConfigError, readEnv } from "../src/env.js";
 import { bearerOf, newApiKey, verifyKey } from "../src/http/auth.js";
 import { readLogo } from "../src/services.js";
-import { invoicePath, localStore, objectStore } from "../src/storage.js";
+import { invoicePath, localStore, objectStore, sha256Of } from "../src/storage.js";
 import { BASE_ENV } from "./helpers.js";
 
 const NAV = {
@@ -65,9 +65,10 @@ test("API keys: verified against their hashes, a wrong one is not, and only Bear
 test("the local store writes only the paths it makes, and never outside its folder", async () => {
   const folder = mkdtempSync(join(tmpdir(), "szamlazo-store-"));
   const store = localStore(folder);
-  const path = invoicePath("SZ2026/00042", 2026);
-  assert.equal(path, "invoices/2026/SZ2026-00042.pdf");
-  const stored = await store.put(path, new Uint8Array([1, 2, 3]));
+  const bytes = new Uint8Array([1, 2, 3]);
+  const path = invoicePath("SZ2026/00042", 2026, sha256Of(bytes));
+  assert.equal(path, "invoices/2026/SZ2026-00042-039058c6f2c0.pdf");
+  const stored = await store.put(path, bytes);
   assert.equal(stored.bytes, 3);
   assert.deepEqual([...(await store.get(path))], [1, 2, 3]);
   await store.probe!();
@@ -75,7 +76,10 @@ test("the local store writes only the paths it makes, and never outside its fold
     await assert.rejects(store.get(bad), /refusing/);
     await assert.rejects(store.put(bad, new Uint8Array()), /refusing/);
   }
-  assert.throws(() => invoicePath("../SZ2026/1", 2026));
+  assert.throws(() => invoicePath("../SZ2026/1", 2026, sha256Of(bytes)));
+  assert.throws(() => invoicePath("SZ2026/1", 2026, "not-a-hash"));
+  // The same number with other bytes is another file: nothing is ever overwritten.
+  assert.notEqual(invoicePath("SZ2026/00042", 2026, sha256Of(new Uint8Array([9]))), path);
 });
 
 test("the bucket store signs its requests and checks the bytes it sends", async () => {
@@ -87,10 +91,10 @@ test("the bucket store signs its requests and checks the bytes it sends", async 
       return new Response(null, { status: 200 });
     },
   );
-  await store.put("invoices/2026/SZ2026-00001.pdf", new Uint8Array([1, 2, 3]));
+  await store.put("invoices/2026/SZ2026-00001-039058c6f2c0.pdf", new Uint8Array([1, 2, 3]));
   const request = seen[0]!;
   assert.equal(request.method, "PUT");
-  assert.equal(request.url, "https://account.r2.cloudflarestorage.com/invoices/invoices/2026/SZ2026-00001.pdf");
+  assert.equal(request.url, "https://account.r2.cloudflarestorage.com/invoices/invoices/2026/SZ2026-00001-039058c6f2c0.pdf");
   assert.match(request.headers.get("authorization") ?? "", /^AWS4-HMAC-SHA256 Credential=id\//);
   assert.equal(request.headers.get("x-amz-content-sha256"), "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81");
   await assert.rejects(store.put("../escape.pdf", new Uint8Array()), /refusing/);
