@@ -75,7 +75,7 @@ services:
   cloudflared:
     # Started only when COMPOSE_PROFILES=tunnel is set in deploy/.env.
     profiles: [tunnel]
-    image: cloudflare/cloudflared:2026.9.1
+    image: cloudflare/cloudflared:2026.10.6
     restart: unless-stopped
     command: tunnel --no-autoupdate run
     environment:
