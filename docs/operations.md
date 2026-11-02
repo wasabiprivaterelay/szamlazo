@@ -78,8 +78,11 @@ open an issue with NAV's message (without personal data) so it is fixed for
 everyone.
 
 **`SZ2026/00042: email not sent for an hour`**
-Brevo refused the email or the buyer's mailbox bounced it. Check Brevo's
-logs. For a wrong address, send it to the right one:
+Brevo refused the email or the buyer's mailbox bounced it. If *every*
+email fails, the usual cause is Brevo blocking the server's IP address: Brevo
+emails the account owner when it does, and the fix is in
+[production.md, step 5.4](production.md#5-brevo-email). Otherwise check the
+email's entry in Brevo's transactional logs. For a wrong address, send it to the right one:
 
 ```sh
 curl -X POST https://szamlazo.example.hu/v1/invoices/<id>/resend \

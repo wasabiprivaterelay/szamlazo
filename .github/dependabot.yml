@@ -6,12 +6,28 @@ updates:
     groups:
       dev-dependencies: { dependency-type: development }
       production-dependencies: { dependency-type: production }
+    ignore:
+      # @types/node follows the oldest Node version we support (22), not the newest.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint supports TypeScript <6.1; move both together, by hand.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: monthly }
+  # Major versions of Node and Postgres are upgraded deliberately, not by a bot:
+  # a new Postgres major cannot open an older one's data directory, and the
+  # image's Node must match what CI tests.
   - package-ecosystem: docker
     directory: /
     schedule: { interval: monthly }
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker-compose
     directory: /deploy
     schedule: { interval: monthly }
+    ignore:
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]

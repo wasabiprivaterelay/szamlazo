@@ -245,15 +245,49 @@ Check: nothing to check yet; `doctor` in step 9 writes and reads a probe file.
 
 ## 5. Brevo: email
 
-1. **Senders, Domains & Dedicated IPs → Domains → Add a domain**: the domain
-   your invoices come from. Brevo shows DNS records (a `brevo-code` TXT, two
-   DKIM CNAMEs, a DMARC TXT). Add them in Cloudflare DNS (Brevo can do it for
-   you if you let it sign in to Cloudflare), then **Authenticate** in Brevo.
-   Without this, invoice emails land in spam.
-2. **Senders → Add a sender**: for example `szamla@example.hu`, with your
-   business name.
-3. **SMTP & API → API keys → Generate a new API key**: name `szamlazo`. Copy
-   it (it starts `xkeysib-`).
+Every Brevo setting below is under the **account dropdown** in the top right
+corner of the Brevo dashboard.
+
+**5.1 Authenticate your domain.** Without this, invoice emails land in spam.
+
+1. Account dropdown → **Settings → Senders, Domains, IPs → Domains → Add a
+   domain**. Enter the part after the `@` of your sender address
+   (`example.hu`), then **Add domain**.
+2. Choose **Authenticate the domain yourself**. Brevo lists three kinds of
+   DNS record: a **Brevo code** (TXT), **DKIM** (two CNAME records, or one TXT
+   on older accounts) and **DMARC** (TXT).
+3. In Cloudflare → your domain → **DNS → Records**, add each record exactly as
+   Brevo shows it. Two Cloudflare traps:
+   - For the DKIM **CNAME** records, switch **Proxy status** off (grey cloud,
+     "DNS only"). Proxied, DKIM fails.
+   - If you already have a DMARC record (`_dmarc`), edit it instead of adding
+     a second one.
+4. Back in Brevo, click **Authenticate this email domain**. It usually works
+   within minutes; DNS can take up to 48 hours.
+
+**5.2 The sender.** Account dropdown → **Settings → Senders, Domains, IPs →
+Senders → Add sender**: for example `szamla@example.hu`, with your business
+name. This address is `EMAIL_FROM` in step 8.
+
+**5.3 The API key.** Account dropdown → **SMTP & API → API keys** tab →
+**Generate a new API key**, name `szamlazo`, **Generate**. Copy it now
+(it starts `xkeysib-`); Brevo shows it once. It is `BREVO_API_KEY` in step 8.
+
+**5.4 Authorise the server's addresses.** Brevo blocks API calls from IP
+addresses it does not know. For the first 30 days it learns and allows new
+ones, then blocking switches on, and a server that later changes address
+(or one Brevo never saw) has every email refused. So list the server
+explicitly. On the server:
+
+```sh
+curl -4 -s https://ifconfig.me; echo      # the IPv4 address
+curl -6 -s https://ifconfig.me; echo      # the IPv6 address, if it has one
+```
+
+Then account dropdown → **Settings → Security → Authorized IPs → Authorize
+IP address**: choose **IPv4**, paste the address, **Authorize IP address**.
+Repeat with **IPv6** if the second command printed one. When Brevo blocks
+an address it emails the account owner, naming the address and the key.
 
 Brevo's free plan sends 300 emails a day, which is 300 invoices a day minus
 alerts. A larger shop needs a paid plan.
