@@ -11,7 +11,11 @@ on top.
 
 It is what Számlázz.hu or Billingo do for invoices you issue from your own
 systems, without a monthly fee and without your invoices living on someone
-else's servers. Built for, and running in, a real web shop.
+else's servers.
+
+It began as the invoicing backend of a family web shop, where the NAV client
+and the invoice code were first written and tested against NAV, and was split
+out into its own project in November 2026.
 
 ```
 your web shop / script / UI
@@ -27,6 +31,8 @@ your web shop / script / UI
        ▼              ▼
    Postgres     PDF storage (folder or S3 / Cloudflare R2)
 ```
+
+<p align="center"><img src="docs/images/invoice.png" alt="A sample invoice PDF" width="520"></p>
 
 ## What it does
 
