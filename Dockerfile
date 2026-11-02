@@ -2,7 +2,7 @@
 #   docker build -t szamlazo .
 # Two stages: the first compiles everything, the second holds only what runs.
 
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /repo
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/invoicing/package.json packages/invoicing/
@@ -12,7 +12,7 @@ RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY packages packages
 RUN npm run build
 
-FROM node:22-alpine
+FROM node:26-alpine
 ENV NODE_ENV=production
 WORKDIR /app
 COPY package.json package-lock.json ./
