@@ -1,0 +1,39 @@
+{
+  "name": "szamlazo",
+  "private": true,
+  "type": "module",
+  "description": "Self-hosted Hungarian invoicing with NAV Online Számla reporting",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.9"
+  },
+  "workspaces": [
+    "packages/invoicing",
+    "packages/nav",
+    "packages/server"
+  ],
+  "scripts": {
+    "build:libs": "npm run build -w @szamlazo/invoicing && npm run build -w @szamlazo/nav",
+    "build": "npm run build:libs && npm run build -w @szamlazo/server",
+    "check": "npm run build:libs && npm run check --workspaces",
+    "test": "npm run build:libs && npm run test --workspaces",
+    "lint": "eslint .",
+    "dev": "npm run build:libs && tsx watch --env-file-if-exists=.env packages/server/src/index.ts",
+    "nav": "npm run build:libs --silent && node --env-file-if-exists=.env packages/nav/dist/cli.js",
+    "szamlazo": "npm run build --silent && node --env-file-if-exists=.env packages/server/dist/cli.js",
+    "start": "node --env-file-if-exists=.env packages/server/dist/index.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.5",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.14.0",
+    "globals": "^17.12.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.1"
+  },
+  "overrides": {
+    "esbuild": "^0.28.2",
+    "minimatch": "^11.0.4"
+  }
+}

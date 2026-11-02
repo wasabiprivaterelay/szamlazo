@@ -1,0 +1,37 @@
+{
+  "name": "@szamlazo/invoicing",
+  "version": "0.1.0",
+  "description": "Hungarian invoices: amounts, gapless numbering, storno and a PDF that prints ő and ű",
+  "keywords": ["invoice", "számla", "hungary", "pdf", "vat", "áfa"],
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wasabiprivaterelay/szamlazo.git",
+    "directory": "packages/invoicing"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "pdfmake": "^0.3.13"
+  },
+  "devDependencies": {
+    "@types/fontkit": "^2.0.9",
+    "@types/pdfmake": "^0.2.11",
+    "fontkit": "^2.0.4",
+    "vitest": "^5.0.5"
+  }
+}

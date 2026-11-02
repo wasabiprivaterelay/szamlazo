@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Encrypted off-site backup of the database and the invoice PDFs, with restic,
+# to a Cloudflare R2 bucket. Nothing unencrypted is written to disk or leaves
+# the server. Run nightly from cron (docs/production.md, step 9):
+#
+#   15 2 * * * $HOME/szamlazo/deploy/bin/backup >> $HOME/szamlazo-backup.log 2>&1
+#
+#   backup                 make a backup now
+#   backup init            create the encrypted repository (once)
+#   backup snapshots       list what is stored
+#   backup restore-invoices [snapshot]   put the PDFs back into the server's volume
+#   backup check --read-data   verify every stored byte
+#   backup <anything>      passed to restic as it is, for restores:
+#   backup dump --tag database latest /szamlazo.dump > szamlazo.dump
+#
+# Reads deploy/backup.env and deploy/restic-password. Healthchecks.io hears
+# when a run starts and how it ended, so a backup that stops is noticed.
+set -euo pipefail
+
+deploy="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=/dev/null
+source "$deploy/backup.env"
+: "${R2_ENDPOINT:?set R2_ENDPOINT in deploy/backup.env}"
+: "${R2_BUCKET:?set R2_BUCKET in deploy/backup.env}"
+[[ -s "$deploy/restic-password" ]] || { echo "missing $deploy/restic-password (docs/production.md, step 9)" >&2; exit 78; }
+
+compose() { docker compose --project-directory "$deploy" -f "$deploy/compose.yml" "$@"; }
+
+ping() {
+  [[ -n "${BACKUP_HEALTHCHECK_URL:-}" ]] || return 0
+  curl -fsS -m 10 --retry 3 -o /dev/null "$BACKUP_HEALTHCHECK_URL$1" || true
+}
+
+# Extra docker run arguments for one call, such as a volume to back up.
+extra=()
+restic() {
+  docker run --rm -i "${extra[@]}" \
+    -e AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" \
+    -e AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
+    -e AWS_DEFAULT_REGION=auto \
+    -e RESTIC_REPOSITORY="s3:$R2_ENDPOINT/$R2_BUCKET/restic" \
+    -e RESTIC_PASSWORD_FILE=/run/restic-password \
+    -v "$deploy/restic-password:/run/restic-password:ro" \
+    -v szamlazo-restic-cache:/root/.cache/restic \
+    restic/restic:0.19.1 "$@"
+}
+
+# Puts the invoice PDFs of a snapshot back into the server's volume.
+if [[ "${1:-}" == restore-invoices ]]; then
+  extra=(-v szamlazo_invoices:/invoices)
+  restic restore --tag invoices "${2:-latest}" --target /
+  exit
+fi
+
+if [[ $# -gt 0 ]]; then
+  restic "$@"
+  exit
+fi
+
+echo "$(date -u +%FT%TZ) backup starting"
+ping /start
+# shellcheck disable=SC2154  # status is assigned inside the trap
+trap 'status=$?; echo "$(date -u +%FT%TZ) backup failed ($status)"; ping "/$status"' ERR
+
+# The database, streamed from pg_dump straight into restic.
+compose exec -T postgres pg_dump -U szamlazo --format=custom szamlazo \
+  | restic backup --quiet --stdin --stdin-filename szamlazo.dump --tag database
+
+# The PDFs, when they are kept on this server (STORAGE=local). With
+# STORAGE=s3 they live in R2 already; this finds an empty folder and
+# stores nothing.
+extra=(-v szamlazo_invoices:/invoices:ro)
+restic backup --quiet --tag invoices /invoices
+extra=()
+
+# Kept: 30 daily, 12 monthly and 10 yearly copies. Invoices must be kept for
+# eight years (Számv. tv. 169. §); the yearly copies cover that with room.
+restic forget --quiet --group-by tags --keep-daily 30 --keep-monthly 12 --keep-yearly 10 --prune
+
+echo "$(date -u +%FT%TZ) backup done"
+ping ""

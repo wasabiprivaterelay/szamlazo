@@ -1,0 +1,99 @@
+# Production: Postgres, the server, and (optionally) a Cloudflare Tunnel.
+# Run from this folder; docs/production.md walks through every step.
+#
+#   cd deploy
+#   docker compose up -d --build
+#
+# Two env files live next to this one, both created on the server and never
+# committed:
+#   .env           for Compose itself: POSTGRES_PASSWORD, TUNNEL_TOKEN, COMPOSE_PROFILES
+#   szamlazo.env   for the server: seller, NAV, email, storage (from ../.env.example)
+# They are separate so the server never sees the tunnel token.
+#
+# Nothing here publishes a port to the internet. The database is on a network
+# with no way out; the server is reached through the tunnel, or through
+# 127.0.0.1:3000 on this machine when SERVER_PORT is set.
+
+name: szamlazo
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: szamlazo
+      POSTGRES_DB: szamlazo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=30"]
+    mem_limit: 512m
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [database]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U szamlazo -d szamlazo"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  server:
+    build:
+      context: ..
+    image: szamlazo:local
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: [szamlazo.env]
+    environment:
+      # Built here so the password lives in one place only.
+      DATABASE_URL: postgres://szamlazo:${POSTGRES_PASSWORD}@postgres:5432/szamlazo
+      HOST: 0.0.0.0
+      PORT: "3000"
+      STORAGE_DIR: /data/invoices
+    # Only for reaching the server from this machine (curl, a local web shop).
+    # Bound to 127.0.0.1, because Docker's port rules bypass ufw.
+    ports:
+      - "127.0.0.1:${SERVER_PORT:-3000}:3000"
+    # The container can write nowhere but the invoice folder and /tmp, runs
+    # as an ordinary user, and holds no Linux capabilities.
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    pids_limit: 200
+    volumes:
+      - invoices:/data/invoices
+      # A logo for the PDF: put logo.png here and set
+      # INVOICE_LOGO_PATH=/app/branding/logo.png in szamlazo.env.
+      - ./branding:/app/branding:ro
+    networks: [database, outside]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  cloudflared:
+    # Started only when COMPOSE_PROFILES=tunnel is set in deploy/.env.
+    profiles: [tunnel]
+    image: cloudflare/cloudflared:2026.9.1
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in deploy/.env, or remove tunnel from COMPOSE_PROFILES}
+    depends_on: [server]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    networks: [outside]
+
+networks:
+  # No route out: only the server can reach the database, and the database
+  # can reach nothing.
+  database:
+    internal: true
+  outside: {}
+
+volumes:
+  postgres-data:
+  invoices:

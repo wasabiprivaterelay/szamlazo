@@ -1,0 +1,37 @@
+{
+  "name": "@szamlazo/nav",
+  "version": "0.1.0",
+  "description": "Client for NAV Online Számla v3.0: signing, token exchange, invoice reporting and queries",
+  "keywords": ["nav", "online-szamla", "online számla", "invoice", "hungary", "számla"],
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wasabiprivaterelay/szamlazo.git",
+    "directory": "packages/nav"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "nav-online-szamla": "./dist/cli.js"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.11.2"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.5"
+  }
+}

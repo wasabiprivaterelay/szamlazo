@@ -1,0 +1,67 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# The workflow reads the code and nothing else.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: szamlazo
+          POSTGRES_PASSWORD: szamlazo
+          POSTGRES_DB: szamlazo_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U szamlazo"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm audit --audit-level=moderate
+      - run: npm run lint
+      - run: npm run check
+      - run: npm test
+        env:
+          TEST_DATABASE_URL: postgres://szamlazo:szamlazo@127.0.0.1:5432/szamlazo_test
+      - run: npm run build
+      - name: Schema and migrations agree
+        run: |
+          cd packages/server
+          npx drizzle-kit generate | tee /tmp/drizzle.txt
+          grep -q "No schema changes" /tmp/drizzle.txt
+
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - run: docker build -t szamlazo:ci .
+      - name: The image starts and refuses a missing configuration
+        run: |
+          set +e
+          docker run --rm szamlazo:ci; code=$?
+          test "$code" -eq 78
