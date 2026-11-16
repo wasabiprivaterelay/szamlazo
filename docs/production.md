@@ -229,6 +229,10 @@ cd szamlazo
 git checkout v0.1.0            # a release tag, not main, in production
 ```
 
+A tag does not move, so `git pull` does nothing here (git says "You are not
+currently on a branch"). Updating means checking out the next tag:
+[step 14](#14-updating).
+
 Everything below happens in `~/szamlazo/deploy`.
 
 ## 4. Cloudflare R2: storage for PDFs and backups
@@ -278,7 +282,10 @@ Add it after your first real invoice, so test files are not locked in for
 eight years. The server never overwrites a PDF (each file name carries a
 piece of the PDF's own fingerprint), so the lock never gets in its way.
 
-Check: nothing to check yet; `doctor` in step 9 writes and reads a probe file.
+Check: **R2 → Overview** lists two buckets, `szamlazo-invoices` and
+`szamlazo-backups`, both marked EU, and **Manage API tokens** lists two tokens,
+each applied to a different one of them. `doctor` in step 9 then writes and
+reads a probe file.
 
 ## 5. Brevo: email
 
@@ -387,8 +394,9 @@ illustrations; click **Continue with Self-hosted and private**. Then:
    IP" or "Add Workers", and leave **browser-based RDP, SSH, or VNC** off.
 3. **Access policies → Create new policy:** name `clients`, Action **Service
    Auth**, Add rule → Include → selector **Service Token**, value `webshop`
-   (and any others). Save the policy and make sure it is attached to the
-   application.
+   (and any others). The Action field starts on **Allow**: change it, because
+   an Allow policy lets in only people who log in, never a token. Save the
+   policy and make sure it is attached to the application.
 4. Save the application.
 
 Zero Trust asks for a team name and a plan the first time you open it; the
@@ -407,6 +415,12 @@ Anything but `200` (Cloudflare answers `302`, a redirect to its login page, or
 $ curl -s https://szamlazo.example.hu/health \
     -H "CF-Access-Client-Id: <client id>" -H "CF-Access-Client-Secret: <client secret>"
 ```
+
+If the token is refused once the server runs: `401` means Access does not
+know the token (a mistyped ID or secret, or a secret that was never copied:
+it is shown once, so make a new token); `403` means it knows the token but
+the policy does not let it in (Action still **Allow**, the token not in
+Include, or the policy not attached to the application).
 
 ## 7. NAV: the live technical user
 
@@ -466,9 +480,11 @@ NAV_SOFTWARE_DEV_CONTACT=…
 
 STORAGE=s3
 S3_ENDPOINT=https://<account id>.eu.r2.cloudflarestorage.com
-S3_BUCKET=szamlazo-invoices
+S3_BUCKET=szamlazo-invoices       # exactly as R2 shows it: hyphens, never underscores
 S3_ACCESS_KEY_ID=…               # the szamlazo-server token, step 4
 S3_SECRET_ACCESS_KEY=…
+# S3_REGION stays unset (it defaults to auto); the .eu. in the endpoint is
+# what keeps the files in the EU.
 
 BREVO_API_KEY=…                  # step 5
 EMAIL_FROM=szamla@example.hu
@@ -586,7 +602,9 @@ crontab -e
 15 2 * * * $HOME/szamlazo/deploy/bin/backup >> $HOME/szamlazo-backup.log 2>&1
 ```
 
-**Prove the backup restores**, now and every six months
+**Prove the backup restores**, now and every six months. It reads back the
+latest backup, so it only works after the first `bin/backup` above
+("no snapshot found" means none has been made yet)
 ([operations.md](operations.md#restore-drill) has the full drill):
 
 ```sh

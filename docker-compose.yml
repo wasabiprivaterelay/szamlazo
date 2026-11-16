@@ -1,6 +1,9 @@
 # Local development only: a Postgres for `npm run dev` and `npm test`.
 #   docker compose up -d
-# Production uses deploy/compose.yml (docs/production.md).
+# Production uses deploy/compose.yml (docs/production.md). Its own project
+# name, so running this file by mistake on a server never touches production.
+name: szamlazo-dev
+
 services:
   postgres:
     image: postgres:17-alpine
