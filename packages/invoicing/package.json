@@ -26,7 +26,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "pdfmake": "^0.3.13"
+    "pdfmake": "^0.3.14"
   },
   "devDependencies": {
     "@types/fontkit": "^2.0.9",
