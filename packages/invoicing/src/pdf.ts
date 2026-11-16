@@ -15,6 +15,7 @@ import {
   formatTaxNumber,
   formatUnitMoney,
   paymentMethodLabel,
+  registrationLabel,
 } from "./format.js";
 import type { Invoice, Party, VatExemption } from "./types.js";
 
@@ -129,7 +130,7 @@ function partyBlock(heading: string, party: Party, accent: string): Content {
     place = [`${party.postcode} ${party.city}, ${party.address}`, COUNTRY_NAMES[country] ?? country];
     numbers = [];
     if (party.taxNumber) numbers.push(`Adószám: ${formatTaxNumber(party.taxNumber)}`);
-    if (party.registrationNumber) numbers.push(`Nyilvántartási szám: ${party.registrationNumber}`);
+    if (party.registrationNumber) numbers.push(`${registrationLabel(party.registrationNumber)}: ${party.registrationNumber}`);
     if (party.bankAccount) numbers.push(`Bankszámlaszám: ${party.bankAccount}`);
     if (party.email) numbers.push(party.email);
     if (party.phone) numbers.push(party.phone);

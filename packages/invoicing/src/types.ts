@@ -14,7 +14,10 @@ export type Party = {
   countryCode?: string;
   /** 11 characters with or without dashes. Required for a company buyer. */
   taxNumber?: string;
-  /** Sole traders have this instead of a company registration number. */
+  /**
+   * A company's cégjegyzékszám (01-09-123456) or a sole trader's
+   * nyilvántartási szám; the invoice names it by its shape.
+   */
   registrationNumber?: string;
   email?: string;
   phone?: string;

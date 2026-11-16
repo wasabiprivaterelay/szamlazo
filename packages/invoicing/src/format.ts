@@ -81,6 +81,16 @@ export function paymentMethodLabel(method: PaymentMethod): string {
 }
 
 /** 12345678241 and 12345678-2-41 are the same number; this prints the second. */
+/**
+ * What a registration number is called on the invoice. A company's
+ * cégjegyzékszám always has the shape 01-09-123456 (court, company form, six
+ * digits); anything else, such as a sole trader's eight-digit number or a
+ * civil organisation's seven-digit one, is a nyilvántartási szám.
+ */
+export function registrationLabel(registrationNumber: string): string {
+  return /^(?:Cg\.\s*)?\d{2}-\d{2}-\d{6}$/i.test(registrationNumber.trim()) ? "Cégjegyzékszám" : "Nyilvántartási szám";
+}
+
 export function formatTaxNumber(taxNumber: string): string {
   const digits = taxNumber.replace(/\D/g, "");
   if (digits.length !== 11) return taxNumber;

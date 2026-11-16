@@ -8,6 +8,7 @@ import {
   formatUnitAmount,
   formatUnitMoney,
   paymentMethodLabel,
+  registrationLabel,
   yearOf,
 } from "../src/format.js";
 
@@ -68,4 +69,12 @@ test("payment methods are named in Hungarian", () => {
   assert.equal(paymentMethodLabel("card"), "Bankkártya");
   assert.equal(paymentMethodLabel("transfer"), "Átutalás");
   assert.equal(paymentMethodLabel("cash"), "Készpénz");
+});
+
+test("a cégjegyzékszám is called one, anything else a nyilvántartási szám", () => {
+  assert.equal(registrationLabel("01-09-123456"), "Cégjegyzékszám");
+  assert.equal(registrationLabel(" Cg. 19-09-500123 "), "Cégjegyzékszám");
+  // A sole trader's number, and a civil organisation's seven-digit one.
+  assert.equal(registrationLabel("56789012"), "Nyilvántartási szám");
+  assert.equal(registrationLabel("01-02-0012345"), "Nyilvántartási szám");
 });
