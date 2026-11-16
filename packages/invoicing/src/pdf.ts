@@ -111,24 +111,36 @@ const FACTS_LAYOUT: CustomTableLayout = {
   paddingRight: () => 0,
 };
 
+/** Country names for the address block; anything else prints as its code. */
+const COUNTRY_NAMES: Record<string, string> = { HU: "Magyarország" };
+
+/**
+ * A party's block: the name, then where it is (postcode, city and street on
+ * one line, then the country), then, set a little apart, its numbers.
+ */
 function partyBlock(heading: string, party: Party, accent: string): Content {
-  const lines: string[] = [party.name];
+  let place: string[];
+  let numbers: string[];
   if (party.lines) {
-    lines.push(...party.lines.filter((line) => line.trim() !== ""));
+    place = party.lines.filter((line) => line.trim() !== "");
+    numbers = [];
   } else {
-    lines.push(`${party.postcode} ${party.city}`, party.address);
-    if (party.taxNumber) lines.push(`Adószám: ${formatTaxNumber(party.taxNumber)}`);
-    if (party.registrationNumber) lines.push(`Nyilvántartási szám: ${party.registrationNumber}`);
-    if (party.bankAccount) lines.push(`Bankszámlaszám: ${party.bankAccount}`);
-    if (party.email) lines.push(party.email);
-    if (party.phone) lines.push(party.phone);
+    const country = party.countryCode ?? "HU";
+    place = [`${party.postcode} ${party.city}, ${party.address}`, COUNTRY_NAMES[country] ?? country];
+    numbers = [];
+    if (party.taxNumber) numbers.push(`Adószám: ${formatTaxNumber(party.taxNumber)}`);
+    if (party.registrationNumber) numbers.push(`Nyilvántartási szám: ${party.registrationNumber}`);
+    if (party.bankAccount) numbers.push(`Bankszámlaszám: ${party.bankAccount}`);
+    if (party.email) numbers.push(party.email);
+    if (party.phone) numbers.push(party.phone);
   }
 
   return {
     stack: [
       { text: heading, color: accent, bold: true, fontSize: 8, characterSpacing: 0.6 },
-      { text: lines[0]!, bold: true, margin: [0, 3, 0, 0] },
-      ...lines.slice(1).map((line) => ({ text: line, color: MUTED })),
+      { text: party.name, bold: true, margin: [0, 3, 0, 0] },
+      ...place.map((line) => ({ text: line, color: MUTED })),
+      ...numbers.map((line, index) => ({ text: line, color: MUTED, margin: [0, index === 0 ? 5 : 0, 0, 0] as [number, number, number, number] })),
     ],
     fontSize: 9.5,
   };
