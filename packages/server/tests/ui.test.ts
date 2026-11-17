@@ -289,7 +289,7 @@ test("every action through the page is logged with who, how and from where; noth
 });
 
 test("what the server does on its own is logged as the system: NAV's answers and the emails", async () => {
-  const { app, as, services, mailer } = setup();
+  const { app, as, services, mailer, later } = setup();
   const jwt = token({});
   const body = { buyer: privateBuyer, lines: twoLines, paymentMethod: "transfer" };
   const issued = (await (await app.request("/v1/invoices", as(jwt, { method: "POST", headers: { "x-szamlazo-ui": "1" }, body: JSON.stringify(body) }))).json()) as {
@@ -297,6 +297,7 @@ test("what the server does on its own is logged as the system: NAV's answers and
   };
   await advanceInvoice(services.checker, issued.invoice.id);
   assert.equal(mailer.sent.length, 1);
+  later(10);
   await sendInvoiceEmail(services.checker, issued.invoice.id, { copy: "1", to: "masik@example.com" });
 
   const history = (await (await app.request(`/v1/invoices/${issued.invoice.id}/history`, as(jwt))).json()) as { entries: Entry[] };
@@ -305,4 +306,9 @@ test("what the server does on its own is logged as the system: NAV's answers and
   assert.ok(system[0]?.details.transactionId);
   assert.equal(system[2]?.details.to, privateBuyer.email);
   assert.equal(system[3]?.details.copy, true);
+
+  const viewed = (await (await app.request(`/v1/invoices/${issued.invoice.id}`, as(jwt))).json()) as {
+    invoice: { lastEmailSent: { to: string; at: string } };
+  };
+  assert.equal(viewed.invoice.lastEmailSent.to, "masik@example.com", "the status shows the latest send, resends included");
 });

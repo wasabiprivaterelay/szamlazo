@@ -196,6 +196,14 @@ export function createApp(services: Services, options: AppOptions = {}) {
       .orderBy(desc(navSubmissions.createdAt))
       .limit(1);
     const [email] = await db.select().from(emailLog).where(eq(emailLog.dedupeKey, `invoice:${row.id}`));
+    // The last time this invoice actually went out by email: the automatic
+    // send or any resend from the page or the API.
+    const [lastSent] = await db
+      .select({ to: emailLog.recipient, at: emailLog.sentAt })
+      .from(emailLog)
+      .where(and(eq(emailLog.invoiceId, row.id), eq(emailLog.status, "sent")))
+      .orderBy(desc(emailLog.sentAt), desc(emailLog.createdAt))
+      .limit(1);
     const [original] = row.originalInvoiceId
       ? await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq(invoices.id, row.originalInvoiceId))
       : [];
@@ -240,6 +248,7 @@ export function createApp(services: Services, options: AppOptions = {}) {
       email: row.emailTo
         ? { to: row.emailTo, status: email?.status ?? "queued", sentAt: email?.sentAt ?? null }
         : null,
+      lastEmailSent: lastSent ?? null,
       manualEmail: manual
         ? { to: (manual.details as { to?: string } | null)?.to ?? null, at: manual.createdAt, by: manual.actor }
         : null,

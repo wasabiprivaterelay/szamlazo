@@ -506,7 +506,8 @@ function navChip(nav, small) {
   const text = small ? label.replace("NAV: ", "") : label;
   return h("span", { class: "chip " + kind }, text.charAt(0).toUpperCase() + text.slice(1));
 }
-function emailChip(email, manual) {
+function emailChip(email, manual, lastSent) {
+  if (lastSent) return h("span", { class: "chip ok" }, "Elküldve");
   if (manual && (!email || !["sent", "delivered"].includes(email.status))) return h("span", { class: "chip ok" }, "Kézzel elküldve");
   if (!email) return h("span", { class: "chip plain" }, "Nincs elküldve");
   const map = {
@@ -602,7 +603,7 @@ async function showList(main) {
         h("td", { class: "num hide-s" }, inv.paymentMethod === "transfer" ? huDate(inv.dueDate) : "–"),
         h("td", { class: "r num c-amt" }, money(inv.totalGross)),
         h("td", { class: "hide-s" }, navChip(inv.nav, true)),
-        h("td", { class: "hide-s" }, emailChip(inv.email, inv.manualEmail)),
+        h("td", { class: "hide-s" }, emailChip(inv.email, inv.manualEmail, inv.lastEmailSent)),
       )));
     const table = h("div", { class: "tablewrap" }, h("table", { class: "list" },
       h("thead", {}, h("tr", {},
@@ -1130,8 +1131,10 @@ async function showDetail(main, id) {
       h("div", { class: "status-line" }, h("span", {}, "NAV"), navChip(nav, true)),
       nav.transactionId ? h("div", { class: "status-note" }, `Tranzakcióazonosító: ${nav.transactionId}`) : null,
       nav.error ? h("div", { class: "status-note err" }, `${nav.error.code}: ${nav.error.message}`) : null,
-      h("div", { class: "status-line" }, h("span", {}, "E-mail"), emailChip(invoice.email, invoice.manualEmail)),
-      invoice.email ? h("div", { class: "status-note" }, invoice.email.to + (invoice.email.sentAt ? ` · ${huDateTime(invoice.email.sentAt)}` : "")) : null,
+      h("div", { class: "status-line" }, h("span", {}, "E-mail"), emailChip(invoice.email, invoice.manualEmail, invoice.lastEmailSent)),
+      invoice.lastEmailSent
+        ? h("div", { class: "status-note" }, `Utoljára: ${invoice.lastEmailSent.to} · ${huDateTime(invoice.lastEmailSent.at)}`)
+        : invoice.email ? h("div", { class: "status-note" }, invoice.email.to) : null,
       invoice.manualEmail ? h("div", { class: "status-note" },
         `Kézzel elküldve: ${invoice.manualEmail.to || "–"} · ${huDateTime(invoice.manualEmail.at)} · ${actorLabel(invoice.manualEmail.by)}`) : null,
     );
