@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
+  inMemorySequence,
   issueInvoice,
   renderInvoicePdf,
   stornoInvoice,
@@ -308,6 +309,52 @@ export function resolveVat(request: IssueRequest, settings: Pick<IssueSettings, 
   });
 }
 
+/** The dates and the VAT treatment of a request, or the reason it is refused. */
+function planOf(request: IssueRequest, settings: IssueSettings, now: Date) {
+  const today = dayOf(now);
+  const fulfilment = request.fulfilmentDate ? day(request.fulfilmentDate) : today;
+  const due = request.dueDate
+    ? day(request.dueDate)
+    : request.paymentMethod === "transfer"
+      ? addDays(today, settings.paymentTermDays)
+      : today;
+  if (due < today) throw new IssueRefused("the due date cannot be before the day of issue", "DATE_INVALID");
+  if (Math.abs(fulfilment.getTime() - today.getTime()) > 366 * 24 * 60 * 60_000) {
+    throw new IssueRefused("the fulfilment date is more than a year from today", "DATE_INVALID");
+  }
+  return { today, fulfilment, due, lines: resolveVat(request, settings) };
+}
+
+/** What a preview carries in place of an invoice number, so it can never pass for an invoice. */
+export const PREVIEW_NUMBER = "ELŐNÉZET – nem számla";
+
+/**
+ * The PDF the request would produce, checked exactly as `issue` checks it,
+ * but with no number drawn, nothing stored and nothing sent to NAV.
+ */
+export async function preview(
+  settings: IssueSettings,
+  request: IssueRequest,
+  options: { lookupTaxpayer?: (taxNumber: string) => Promise<Taxpayer>; now?: Date } = {},
+): Promise<Uint8Array> {
+  const { today, fulfilment, due, lines } = planOf(request, settings, options.now ?? new Date());
+  const buyer = await confirmedBuyer(request.buyer, options.lookupTaxpayer);
+  const invoice = await issueInvoice(
+    {
+      seller: settings.seller,
+      buyer,
+      lines,
+      issueDate: today,
+      fulfilmentDate: fulfilment,
+      dueDate: due,
+      paymentMethod: request.paymentMethod,
+      note: request.note,
+    },
+    { sequence: inMemorySequence(), numberFormat: settings.numberFormat },
+  );
+  return renderInvoicePdf({ ...invoice, invoiceNumber: PREVIEW_NUMBER }, { ...settings.pdf, createdAt: today });
+}
+
 export async function issue(
   db: Database,
   store: InvoiceStore,
@@ -319,22 +366,8 @@ export async function issue(
     now?: Date;
   },
 ): Promise<IssuedInvoice> {
-  const now = options.now ?? new Date();
-  const today = dayOf(now);
+  const { today, fulfilment, due, lines } = planOf(request, settings, options.now ?? new Date());
   const hash = fingerprint(request);
-
-  const fulfilment = request.fulfilmentDate ? day(request.fulfilmentDate) : today;
-  const due = request.dueDate
-    ? day(request.dueDate)
-    : request.paymentMethod === "transfer"
-      ? addDays(today, settings.paymentTermDays)
-      : today;
-  if (due < today) throw new IssueRefused("the due date cannot be before the day of issue", "DATE_INVALID");
-  if (Math.abs(fulfilment.getTime() - today.getTime()) > 366 * 24 * 60 * 60_000) {
-    throw new IssueRefused("the fulfilment date is more than a year from today", "DATE_INVALID");
-  }
-
-  const lines = resolveVat(request, settings);
 
   // The NAV lookup happens before the transaction, so no lock is held while
   // waiting for NAV. Only a request with a reference can be a retry.

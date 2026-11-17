@@ -1,0 +1,1063 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Számlák</title>
+<style nonce="__NONCE__">
+:root {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --sunk: #f8f9fa;
+  --ink: #16202a;
+  --muted: #5b6672;
+  --faint: #8b949e;
+  --line: #e1e5ea;
+  --line-strong: #c9d0d8;
+  --accent: #155e66;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3f0f1;
+  --ok: #1d7348;
+  --ok-soft: #e2f3ea;
+  --warn: #8a5a00;
+  --warn-soft: #fbf0d9;
+  --err: #b42318;
+  --err-soft: #fde8e6;
+  --focus: #2f7f88;
+  --shadow: 0 1px 2px rgba(22, 32, 42, .06), 0 4px 16px rgba(22, 32, 42, .06);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #11161b;
+    --surface: #181f26;
+    --sunk: #141a20;
+    --ink: #e6eaee;
+    --muted: #a0aab4;
+    --faint: #75808b;
+    --line: #27313b;
+    --line-strong: #36424e;
+    --accent: #5fb3bb;
+    --accent-ink: #0d1a1c;
+    --accent-soft: #19343a;
+    --ok: #63c08f;
+    --ok-soft: #173326;
+    --warn: #e2b04a;
+    --warn-soft: #3a2f16;
+    --err: #f2867a;
+    --err-soft: #3d1f1c;
+    --focus: #7cc6cd;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--accent); }
+.num { font-variant-numeric: tabular-nums; }
+[hidden] { display: none !important; }
+
+/* Top bar */
+.top {
+  position: sticky; top: 0; z-index: 10;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.top-in {
+  max-width: 1180px; margin: 0 auto;
+  padding: 10px max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left));
+  display: flex; align-items: center; gap: 16px;
+}
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); font-weight: 600; }
+.mark { width: 22px; height: 22px; border-radius: 5px; background: var(--accent); position: relative; flex: none; }
+.mark::before, .mark::after { content: ""; position: absolute; left: 7px; height: 3px; background: var(--accent-ink); border-radius: 1px; }
+.mark::before { top: 6px; width: 10px; }
+.mark::after { top: 12px; width: 6px; }
+.top .sp { flex: 1; }
+.who { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.envbadge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--warn-soft); color: var(--warn); }
+
+main { max-width: 1180px; margin: 0 auto; padding: 24px max(16px, env(safe-area-inset-right)) 64px max(16px, env(safe-area-inset-left)); }
+h1 { font-size: 24px; line-height: 1.25; margin: 0; font-weight: 650; text-wrap: balance; }
+h2 { font-size: 15px; margin: 0 0 12px; font-weight: 650; }
+.head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+.head .sp { flex: 1; }
+.sub { color: var(--muted); font-size: 14px; }
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 38px; padding: 0 14px; border-radius: 8px;
+  border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink);
+  font-weight: 550; cursor: pointer; text-decoration: none; white-space: nowrap;
+}
+.btn:hover { background: var(--sunk); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { color: var(--err); }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+.btn.ghost:hover { color: var(--ink); background: var(--sunk); }
+.btn.small { min-height: 30px; padding: 0 10px; font-size: 13px; }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* Cards */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+.card.pad { padding: 20px; }
+.card + .card { margin-top: 16px; }
+
+/* Invoice list */
+.toolbar { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.search {
+  flex: 1; min-width: 200px; max-width: 360px; height: 38px; padding: 0 12px;
+  border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface);
+}
+.tablewrap { overflow-x: auto; }
+table.list { width: 100%; border-collapse: collapse; }
+table.list th {
+  text-align: left; font-size: 12.5px; font-weight: 600; color: var(--muted);
+  padding: 10px 14px; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+table.list td { padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+table.list tr:last-child td { border-bottom: 0; }
+table.list tbody tr { cursor: pointer; }
+table.list tbody tr:hover td { background: var(--sunk); }
+table.list .r { text-align: right; }
+.inv-no { font-weight: 600; white-space: nowrap; }
+.buyer-cell { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.empty { padding: 48px 20px; text-align: center; color: var(--muted); }
+.empty p { margin: 0 0 16px; }
+.more { display: flex; justify-content: center; padding: 14px; border-top: 1px solid var(--line); }
+
+/* Status chips */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 99px;
+  font-size: 12.5px; font-weight: 550; white-space: nowrap; background: var(--sunk); color: var(--muted);
+}
+.chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.chip.ok { background: var(--ok-soft); color: var(--ok); }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.chip.err { background: var(--err-soft); color: var(--err); }
+.chip.busy::before { animation: pulse 1.2s ease-in-out infinite; }
+.chip.plain::before { display: none; }
+@keyframes pulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .chip.busy::before { animation: none; } }
+
+/* Form */
+.formgrid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
+.side { position: sticky; top: 76px; }
+.section { padding: 20px; }
+.section + .section { border-top: 1px solid var(--line); }
+.row + .row { margin-top: 12px; }
+.row { display: grid; gap: 12px; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.f { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.f label, .lbl { font-size: 13px; font-weight: 550; color: var(--muted); }
+.f input, .f select, .f textarea, .cell input, .cell select {
+  width: 100%; height: 38px; padding: 0 10px; border: 1px solid var(--line-strong);
+  border-radius: 8px; background: var(--surface);
+}
+.f textarea { height: auto; min-height: 64px; padding: 8px 10px; resize: vertical; }
+.f input:focus, .f select:focus, .f textarea:focus, .cell input:focus, .cell select:focus, .search:focus {
+  outline: none; border-color: var(--focus); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.f.bad input, .f.bad select, .cell.bad input { border-color: var(--err); }
+.fmsg { font-size: 12.5px; color: var(--err); }
+.hint { font-size: 12.5px; color: var(--faint); }
+.s1 { grid-column: span 1; } .s2 { grid-column: span 2; } .s3 { grid-column: span 3; } .s4 { grid-column: span 4; } .s6 { grid-column: span 6; }
+.seg { display: inline-flex; padding: 3px; border-radius: 9px; background: var(--sunk); border: 1px solid var(--line); }
+.seg button { border: 0; background: transparent; padding: 6px 14px; border-radius: 6px; cursor: pointer; color: var(--muted); font-weight: 550; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.inline { display: flex; gap: 8px; align-items: end; }
+.inline .f { flex: 1; }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+.check input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--accent); flex: none; }
+
+/* Lines */
+.lines { width: 100%; border-collapse: collapse; }
+.lines th { font-size: 12.5px; font-weight: 600; color: var(--muted); text-align: left; padding: 0 6px 6px; white-space: nowrap; }
+.lines td { padding: 4px 6px; vertical-align: top; }
+.lines th:first-child, .lines td:first-child { padding-left: 0; }
+.lines .r { text-align: right; }
+.lines .tot { padding-top: 13px; white-space: nowrap; font-weight: 550; }
+.cell input, .cell select { height: 36px; }
+.cell.qty { width: 84px; } .cell.unit { width: 84px; } .cell.price { width: 130px; } .cell.vat { width: 96px; }
+.cell .sub2 { margin-top: 6px; display: grid; gap: 6px; }
+.aam { padding-top: 9px; color: var(--muted); font-size: 13px; }
+
+/* Summary */
+.sum-label { font-size: 13px; color: var(--muted); }
+.sum-total { font-size: 32px; font-weight: 700; line-height: 1.1; margin: 4px 0 4px; letter-spacing: -.5px; }
+.sum-rows { margin: 16px 0; font-size: 13.5px; }
+.sum-rows div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--line); }
+.sum-rows span:first-child { color: var(--muted); }
+.stack { display: grid; gap: 8px; }
+
+/* Banners */
+.banner { border-radius: 10px; padding: 12px 14px; font-size: 14px; margin-bottom: 16px; }
+.banner.err { background: var(--err-soft); color: var(--err); }
+.banner.warn { background: var(--warn-soft); color: var(--warn); }
+.banner ul { margin: 6px 0 0; padding-left: 18px; }
+
+/* Detail */
+.detail { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+.pdf { width: 100%; height: min(1100px, calc(100vh - 140px)); min-height: 520px; border: 0; border-radius: 12px; background: var(--sunk); display: block; }
+.pdfwrap { padding: 0; overflow: hidden; }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 14px; margin: 0; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.status-line { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.status-line:first-of-type { border-top: 0; padding-top: 0; }
+.status-note { font-size: 13px; color: var(--muted); margin: -4px 0 8px; overflow-wrap: anywhere; }
+.status-note.err { color: var(--err); }
+.big { font-size: 28px; font-weight: 700; letter-spacing: -.4px; margin: 2px 0 14px; }
+
+/* Dialog */
+dialog {
+  border: 0; border-radius: 14px; padding: 0; width: min(560px, calc(100vw - 32px));
+  background: var(--surface); color: var(--ink); box-shadow: 0 20px 60px rgba(0,0,0,.3);
+}
+dialog.wide { width: min(980px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgba(10, 16, 22, .45); }
+.dlg-head { padding: 18px 20px 0; }
+.dlg-body { padding: 14px 20px; }
+.dlg-foot { padding: 14px 20px 18px; display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.dlg-pdf { width: 100%; height: min(75vh, 900px); border: 0; display: block; background: var(--sunk); }
+
+.toast {
+  position: fixed; left: 50%; bottom: max(20px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+  background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 14px;
+  box-shadow: var(--shadow); z-index: 50; max-width: calc(100vw - 32px);
+}
+.loading { color: var(--muted); padding: 40px 0; text-align: center; }
+
+@media (max-width: 900px) {
+  .formgrid, .detail { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; }
+  .pdf { height: 70vh; min-height: 420px; }
+}
+@media (max-width: 640px) {
+  main { padding-top: 16px; }
+  .row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .s1, .s2 { grid-column: span 1; } .s3, .s4, .s6 { grid-column: span 2; }
+  .who { display: none; }
+  table.list .hide-s, table.list thead { display: none; }
+  table.list, table.list tbody { display: block; }
+  table.list tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "no amt" "buyer amt"; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  table.list tr:last-child { border-bottom: 0; }
+  table.list td { padding: 0; border: 0; }
+  table.list td.c-no { grid-area: no; }
+  table.list td.c-buyer { grid-area: buyer; color: var(--muted); font-size: 14px; max-width: none; }
+  table.list td.c-amt { grid-area: amt; align-self: center; font-weight: 600; }
+  .lines thead { display: none; }
+  .lines, .lines tbody, .lines tr, .lines td { display: block; width: 100%; }
+  .lines tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line); }
+  .lines td { padding: 0; }
+  .lines td.desc { grid-column: span 2; }
+  .cell.qty, .cell.unit, .cell.price, .cell.vat { width: auto; }
+  .lines .tot { padding-top: 8px; text-align: left; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="#/"><span class="mark" aria-hidden="true"></span><span id="seller-name">Számlák</span></a>
+    <span class="envbadge" id="env-badge" hidden>Teszt rendszer</span>
+    <span class="sp"></span>
+    <span class="who" id="who"></span>
+  </div>
+</header>
+<main id="main"><div class="loading">Betöltés…</div></main>
+<script nonce="__NONCE__">
+"use strict";
+
+/* ---------- helpers ---------- */
+
+/** Builds an element. Text is always set as text, never parsed as HTML. */
+function h(tag, attrs, ...children) {
+  const el = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs || {})) {
+    if (value === undefined || value === null || value === false) continue;
+    if (key === "class") el.className = value;
+    else if (key.startsWith("on")) el.addEventListener(key.slice(2), value);
+    else if (key === "value") el.value = value;
+    else if (key === "checked" || key === "disabled" || key === "selected") el[key] = Boolean(value);
+    else el.setAttribute(key, value === true ? "" : String(value));
+  }
+  for (const child of children.flat(Infinity)) {
+    if (child === undefined || child === null || child === false) continue;
+    el.append(child instanceof Node ? child : document.createTextNode(String(child)));
+  }
+  return el;
+}
+
+/** Replaces an element's children, skipping the empty ones a conditional leaves. */
+function fill(el, ...kids) {
+  el.replaceChildren(...kids.flat(Infinity).filter((k) => k !== undefined && k !== null && k !== false && k !== "")
+    .map((k) => (k instanceof Node ? k : document.createTextNode(String(k)))));
+}
+
+const money = (n) => new Intl.NumberFormat("hu-HU").format(n) + " Ft";
+const huDate = (iso) => (iso ? iso.slice(0, 10).replaceAll("-", ".") + "." : "");
+const huDateTime = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleString("hu-HU", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+};
+function todayIso() {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Budapest", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  return parts;
+}
+function addDaysIso(iso, days) {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+const formatTax = (v) => {
+  const d = String(v || "").replace(/\D/g, "");
+  return d.length === 11 ? `${d.slice(0, 8)}-${d.slice(8, 9)}-${d.slice(9)}` : v;
+};
+
+class ApiError extends Error {
+  constructor(status, body) {
+    super((body && body.error && body.error.message) || `HTTP ${status}`);
+    this.status = status;
+    this.code = body && body.error && body.error.code;
+    this.details = body && body.error && body.error.details;
+  }
+}
+
+async function api(path, options = {}) {
+  const init = { method: options.method || "GET", headers: {}, credentials: "same-origin" };
+  if (init.method !== "GET") init.headers["x-szamlazo-ui"] = "1";
+  if (options.body !== undefined) {
+    init.headers["content-type"] = "application/json";
+    init.body = JSON.stringify(options.body);
+  }
+  let response;
+  try {
+    response = await fetch(path, init);
+  } catch {
+    throw new ApiError(0, { error: { code: "OFFLINE", message: "Nem sikerült elérni a szervert, vagy lejárt a belépés. Töltsd újra az oldalt, és próbáld újra." } });
+  }
+  // Access sends an expired login to its own page, which fetch cannot follow.
+  if (response.type === "opaqueredirect" || response.redirected && !response.url.startsWith(location.origin)) {
+    throw new ApiError(401, { error: { code: "LOGIN", message: "Lejárt a belépés. Töltsd újra az oldalt." } });
+  }
+  if (options.raw && response.ok) return response;
+  const body = await response.json().catch(() => undefined);
+  if (!response.ok) throw new ApiError(response.status, body);
+  return body;
+}
+
+let toastTimer;
+function toast(text) {
+  document.querySelector(".toast")?.remove();
+  const el = h("div", { class: "toast", role: "status" }, text);
+  document.body.append(el);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.remove(), 3500);
+}
+
+/** A dialog that resolves with the pressed button's value, or undefined when dismissed. */
+function ask({ title, body, buttons, wide, onOpen }) {
+  return new Promise((resolve) => {
+    const dlg = h("dialog", { class: wide ? "wide" : "" });
+    const finish = (value) => { dlg.close(); dlg.remove(); resolve(value); };
+    dlg.append(
+      h("div", { class: "dlg-head" }, h("h2", {}, title)),
+      h("div", { class: "dlg-body" }, body),
+      h("div", { class: "dlg-foot" }, buttons.map((b) =>
+        h("button", { class: "btn " + (b.kind || ""), type: "button", onclick: () => finish(b.value) }, b.label))),
+    );
+    dlg.addEventListener("cancel", (e) => { e.preventDefault(); finish(undefined); });
+    document.body.append(dlg);
+    dlg.showModal();
+    onOpen && onOpen(dlg);
+  });
+}
+
+const objectUrls = new Set();
+function pdfUrl(blob) {
+  const url = URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
+  objectUrls.add(url);
+  return url;
+}
+function releaseUrls() {
+  for (const url of objectUrls) URL.revokeObjectURL(url);
+  objectUrls.clear();
+}
+
+function errorBanner(error) {
+  const items = Array.isArray(error.details) ? error.details : [];
+  return h("div", { class: "banner err", role: "alert" },
+    describeError(error),
+    items.length ? h("ul", {}, items.map((d) => h("li", {}, fieldName(d.path), ": ", huMessage(d.path, d.message)))) : null);
+}
+
+/** The server's checks speak English; the page says the same in Hungarian. */
+function huMessage(path, message) {
+  const m = String(message || "");
+  if (/too small|expected string|required/i.test(m)) return /quantity/.test(path || "") ? "Legalább 1." : "Kötelező.";
+  if (/postcode/i.test(m)) return "Négy számjegy, pl. 1011.";
+  if (/11-digit tax number/i.test(m)) return "A teljes, 11 jegyű adószám kell, pl. 12345678-2-41.";
+  if (/company buyer needs its tax number/i.test(m)) return "Céges vevőnél kötelező az adószám.";
+  if (/email/i.test(m)) return "Érvénytelen e-mail-cím.";
+  if (/control character/i.test(m)) return "Nem engedélyezett karaktert tartalmaz.";
+  if (/too big/i.test(m)) return "Túl nagy érték.";
+  if (/real date|date like/i.test(m)) return "Érvénytelen dátum.";
+  return m;
+}
+
+const ERROR_TEXT = {
+  TAXPAYER_INVALID: "A NAV szerint ez az adószám nem érvényes, vagy nem ehhez a céghez tartozik.",
+  DATE_INVALID: "A dátumok nem stimmelnek.",
+  VAT_INVALID: "Az áfa beállítása nem helyes.",
+  REFERENCE_CONFLICT: "Ezt a számlát már kiállítottuk korábban. Nézd meg a számlák listájában.",
+  INVALID_REQUEST: "Néhány mező hiányzik vagy hibás.",
+  NAV_UNAVAILABLE: "A NAV most nem válaszol.",
+  NO_MAILER: "Ezen a szerveren nincs beállítva e-mail küldés.",
+  ALREADY_STORNO: "Ezt a számlát már sztornóztuk.",
+};
+function describeError(error) {
+  const text = ERROR_TEXT[error.code];
+  if (text && error.code !== "INVALID_REQUEST" && error.message && error.code !== "REFERENCE_CONFLICT") return `${text} (${error.message})`;
+  return text || error.message;
+}
+const FIELD_NAMES = {
+  "buyer.name": "Vevő neve", "buyer.postcode": "Irányítószám", "buyer.city": "Település", "buyer.address": "Cím",
+  "buyer.taxNumber": "Adószám", "buyer.email": "E-mail-cím", fulfilmentDate: "Teljesítés dátuma", dueDate: "Fizetési határidő",
+  note: "Megjegyzés", lines: "Tételek",
+};
+function fieldName(path) {
+  if (FIELD_NAMES[path]) return FIELD_NAMES[path];
+  const m = /^lines\.(\d+)\.?(\w*)/.exec(path || "");
+  if (m) {
+    const part = { description: "megnevezés", quantity: "mennyiség", unit: "egység", unitPriceGross: "egységár", vatRate: "áfa", vatExemption: "mentesség" }[m[2]] || "";
+    return `${Number(m[1]) + 1}. tétel ${part}`.trim();
+  }
+  return path || "Kérés";
+}
+
+/* ---------- status ---------- */
+
+function navChip(nav, small) {
+  const s = nav && nav.status;
+  const map = {
+    done: ["ok", "NAV: befogadva"],
+    warning: ["warn", "NAV: figyelmeztetéssel befogadva"],
+    error: ["err", "NAV: elutasítva"],
+    queued: ["busy", "NAV: beküldésre vár"],
+    pending: ["busy", "NAV: beküldés alatt"],
+    sent: ["busy", "NAV: feldolgozás alatt"],
+    "not configured": ["plain", "NAV nincs beállítva"],
+  };
+  const [kind, label] = map[s] || ["", s || "–"];
+  return h("span", { class: "chip " + kind }, small ? label.replace("NAV: ", "") : label);
+}
+function emailChip(email) {
+  if (!email) return h("span", { class: "chip plain" }, "Nem küldjük");
+  const map = {
+    sent: ["ok", "Elküldve"], delivered: ["ok", "Kézbesítve"], queued: ["busy", "Küldésre vár"], sending: ["busy", "Küldés alatt"],
+    failed: ["err", "Sikertelen"], bounced: ["err", "Visszapattant"],
+  };
+  const [kind, label] = map[email.status] || ["", email.status];
+  return h("span", { class: "chip " + kind }, label);
+}
+const settled = (inv) => ["done", "warning", "error", "not configured"].includes(inv.nav && inv.nav.status) &&
+  (!inv.email || !["queued", "sending"].includes(inv.email.status));
+
+/* ---------- state & routing ---------- */
+
+let me;
+let pollTimer;
+let leaveGuard;
+
+function route() {
+  clearTimeout(pollTimer);
+  releaseUrls();
+  const hash = location.hash || "#/";
+  const [path, query] = hash.slice(1).split("?");
+  const params = new URLSearchParams(query || "");
+  const main = document.getElementById("main");
+  fill(main, h("div", { class: "loading" }, "Betöltés…"));
+  window.scrollTo(0, 0);
+  if (path === "/new") return showForm(main, params.get("copy"));
+  const detail = /^\/i\/([0-9a-f-]{36})$/.exec(path);
+  if (detail) return showDetail(main, detail[1]);
+  return showList(main);
+}
+
+window.addEventListener("hashchange", () => {
+  if (leaveGuard && !leaveGuard()) return;
+  leaveGuard = undefined;
+  route();
+});
+window.addEventListener("beforeunload", (e) => {
+  if (leaveGuard && leaveGuard(true)) { e.preventDefault(); e.returnValue = ""; }
+});
+
+/* ---------- list ---------- */
+
+async function showList(main) {
+  const state = { q: "", offset: 0, rows: [], total: 0 };
+  const tbody = h("tbody");
+  const moreBox = h("div", { class: "more" });
+  const card = h("div", { class: "card" });
+  const search = h("input", { class: "search", type: "search", placeholder: "Keresés számlaszámra vagy vevőre", "aria-label": "Keresés" });
+
+  fill(main, 
+    h("div", { class: "head" },
+      h("h1", {}, "Számlák"),
+      h("span", { class: "sp" }),
+      h("a", { class: "btn primary", href: "#/new" }, "Új számla")),
+    h("div", { class: "toolbar" }, search),
+    card,
+  );
+
+  async function load(reset) {
+    if (reset) { state.offset = 0; state.rows = []; }
+    const qs = new URLSearchParams({ limit: "50", offset: String(state.offset) });
+    if (state.q) qs.set("q", state.q);
+    try {
+      const data = await api("/v1/invoices?" + qs);
+      state.rows = state.rows.concat(data.invoices);
+      state.total = data.total;
+      draw();
+    } catch (error) {
+      fill(card, h("div", { class: "section" }, errorBanner(error)));
+    }
+  }
+
+  function draw() {
+    if (state.rows.length === 0) {
+      fill(card, h("div", { class: "empty" },
+        state.q
+          ? h("p", {}, "Nincs a keresésnek megfelelő számla.")
+          : [h("p", {}, "Még nincs kiállított számla."), h("a", { class: "btn primary", href: "#/new" }, "Első számla kiállítása")]));
+      return;
+    }
+    fill(tbody, ...state.rows.map((inv) =>
+      h("tr", { onclick: () => (location.hash = "#/i/" + inv.id), tabindex: "0", onkeydown: (e) => { if (e.key === "Enter") location.hash = "#/i/" + inv.id; } },
+        h("td", { class: "c-no" }, h("span", { class: "inv-no num" }, inv.invoiceNumber), inv.type === "storno" ? [" ", h("span", { class: "chip plain" }, "sztornó")] : null),
+        h("td", { class: "buyer-cell c-buyer" }, inv.buyer.name),
+        h("td", { class: "num hide-s" }, huDate(inv.issueDate)),
+        h("td", { class: "num hide-s" }, inv.paymentMethod === "transfer" ? huDate(inv.dueDate) : "–"),
+        h("td", { class: "r num c-amt" }, money(inv.totalGross)),
+        h("td", { class: "hide-s" }, navChip(inv.nav, true)),
+        h("td", { class: "hide-s" }, emailChip(inv.email)),
+      )));
+    const table = h("div", { class: "tablewrap" }, h("table", { class: "list" },
+      h("thead", {}, h("tr", {},
+        h("th", {}, "Számlaszám"), h("th", {}, "Vevő"), h("th", { class: "hide-s" }, "Kelte"),
+        h("th", { class: "hide-s" }, "Határidő"), h("th", { class: "r" }, "Végösszeg"),
+        h("th", { class: "hide-s" }, "NAV"), h("th", { class: "hide-s" }, "E-mail"))),
+      tbody));
+    fill(moreBox, h("button", { class: "btn small", type: "button", onclick: () => { state.offset += 50; load(false); } }, `Továbbiak (${state.total - state.rows.length})`));
+    fill(card, table, state.rows.length < state.total ? moreBox : null);
+  }
+
+  let searchTimer;
+  search.addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { state.q = search.value.trim(); load(true); }, 250);
+  });
+  await load(true);
+}
+
+/* ---------- new invoice ---------- */
+
+const VAT_RATES = [27, 18, 5, 0];
+const EXEMPTIONS = [["ATK", "Áfa tv. hatályán kívül"], ["REVERSE_CHARGE", "Fordított adózás"], ["TAM", "Tárgyi adómentes"]];
+
+async function showForm(main, copyId) {
+  const today = todayIso();
+  const here = location.hash;
+  const form = {
+    reference: "ui-" + crypto.randomUUID(),
+    buyer: { type: "company", name: "", postcode: "", city: "", address: "", taxNumber: "", email: "" },
+    lines: [],
+    paymentMethod: "transfer",
+    fulfilmentDate: today,
+    dueDate: addDaysIso(today, me.paymentTermDays),
+    dueTouched: false,
+    note: "",
+    sendEmail: true,
+  };
+  const newLine = () => ({ description: "", quantity: 1, unit: "db", price: "", vatRate: me.seller.aam ? 0 : 27, exemption: "ATK", reason: "" });
+  let dirty = false;
+  let busy = false;
+  let errors = {};
+  let topError;
+
+  let buyers = [];
+  api("/v1/buyers").then((d) => { buyers = d.buyers; drawBuyerPicker(); }).catch(() => {});
+
+  if (copyId) {
+    try {
+      const { invoice } = await api("/v1/invoices/" + copyId);
+      const b = invoice.buyer;
+      form.buyer = { type: b.taxNumber ? "company" : "private", name: b.name || "", postcode: b.postcode || "", city: b.city || "",
+        address: b.address || "", taxNumber: b.taxNumber || "", email: (invoice.email && invoice.email.to) || b.email || "" };
+      form.lines = invoice.lines.filter((l) => l.unitPriceGross >= 0 || invoice.type !== "storno").map((l) => ({
+        description: l.description, quantity: Math.abs(l.quantity), unit: l.unit, price: String(Math.abs(l.unitPriceGross)),
+        vatRate: l.vatRate, exemption: (l.vatExemption && l.vatExemption.case !== "AAM" && l.vatExemption.case) || "ATK",
+        reason: (l.vatExemption && l.vatExemption.case === "TAM" && l.vatExemption.reason) || "",
+      }));
+      form.paymentMethod = invoice.paymentMethod;
+      form.note = invoice.note || "";
+    } catch (error) {
+      topError = error;
+    }
+  }
+  if (form.lines.length === 0) form.lines.push(newLine());
+
+  leaveGuard = (silent) => {
+    if (!dirty || busy) return silent ? false : true;
+    if (silent) return true;
+    if (confirm("Elveted a félbehagyott számlát?")) return true;
+    history.replaceState(null, "", here);
+    return false;
+  };
+
+  const touch = () => { dirty = true; };
+
+  /* --- pieces that redraw on their own --- */
+  const buyerPickerBox = h("div");
+  const buyerBox = h("div");
+  const linesBox = h("div");
+  const paymentBox = h("div");
+  const sideBox = h("div", { class: "card pad" });
+  const errorBox = h("div");
+
+  function field(label, input, opts = {}) {
+    const msg = opts.path && errors[opts.path];
+    return h("div", { class: "f " + (opts.span || "s6") + (msg ? " bad" : "") },
+      h("label", { for: input.id }, label), input,
+      msg ? h("div", { class: "fmsg" }, msg) : opts.hint ? h("div", { class: "hint" }, opts.hint) : null);
+  }
+  function input(id, value, onInput, attrs = {}) {
+    return h("input", { id, value, ...attrs, oninput: (e) => { onInput(e.target.value); touch(); attrs.live && drawSide(); } });
+  }
+
+  function drawBuyerPicker() {
+    if (!buyers.length) { fill(buyerPickerBox, ); return; }
+    const list = h("datalist", { id: "buyer-list" }, buyers.map((b, i) => h("option", { value: b.name + (b.taxNumber ? " · " + b.taxNumber : "") , "data-i": i })));
+    const picker = h("input", { id: "buyer-pick", list: "buyer-list", placeholder: "Kezdd el gépelni a nevét…", autocomplete: "off" });
+    picker.addEventListener("change", () => {
+      const found = buyers.find((b) => b.name + (b.taxNumber ? " · " + b.taxNumber : "") === picker.value);
+      if (!found) return;
+      form.buyer = { type: found.type, name: found.name, postcode: found.postcode, city: found.city, address: found.address,
+        taxNumber: found.taxNumber || "", email: found.email || "" };
+      form.sendEmail = Boolean(found.email);
+      picker.value = "";
+      touch(); drawBuyer(); drawPayment(); drawSide();
+    });
+    fill(buyerPickerBox, h("div", { class: "row" }, field("Korábbi vevő", picker, { hint: "Kitölti a vevő adatait egy korábbi számlából." })), list);
+  }
+
+  async function lookupTax(button) {
+    const digits = form.buyer.taxNumber.replace(/\D/g, "");
+    if (digits.length !== 8 && digits.length !== 11) {
+      errors = { ...errors, "buyer.taxNumber": "Adj meg 8 vagy 11 számjegyet." };
+      drawBuyer();
+      return;
+    }
+    button.disabled = true;
+    button.textContent = "Lekérdezés…";
+    try {
+      const { taxpayer } = await api("/v1/taxpayers/" + digits);
+      if (!taxpayer.valid) {
+        errors = { ...errors, "buyer.taxNumber": "A NAV nem ismeri ezt az adószámot." };
+      } else {
+        const hq = taxpayer.addresses.find((a) => a.type === "HQ") || taxpayer.addresses[0];
+        form.buyer.name = taxpayer.name;
+        if (taxpayer.vatCode && taxpayer.countyCode) form.buyer.taxNumber = `${digits.slice(0, 8)}-${taxpayer.vatCode}-${taxpayer.countyCode}`;
+        if (hq) { form.buyer.postcode = hq.postalCode; form.buyer.city = hq.city; form.buyer.address = hq.address; }
+        const { ["buyer.taxNumber"]: _, ...rest } = errors;
+        errors = rest;
+        touch();
+        toast("Kitöltve a NAV adataiból. Nézd át a címet.");
+      }
+    } catch (error) {
+      errors = { ...errors, "buyer.taxNumber": describeError(error) };
+    }
+    drawBuyer();
+    drawSide();
+  }
+
+  function drawBuyer() {
+    const b = form.buyer;
+    const seg = h("div", { class: "seg", role: "group", "aria-label": "Vevő típusa" },
+      [["company", "Cég"], ["private", "Magánszemély"]].map(([value, label]) =>
+        h("button", { type: "button", "aria-pressed": String(b.type === value), onclick: () => { b.type = value; touch(); drawBuyer(); } }, label)));
+    const lookupBtn = h("button", { class: "btn", type: "button", onclick: (e) => lookupTax(e.currentTarget), disabled: !me.nav }, "Kitöltés a NAV-ból");
+    fill(buyerBox, 
+      h("div", { class: "head" }, h("h2", {}, "Vevő"), h("span", { class: "sp" }), seg),
+      buyerPickerBox,
+      h("div", { class: "row" },
+        b.type === "company"
+          ? h("div", { class: "s6 inline" },
+              field("Adószám", input("b-tax", b.taxNumber, (v) => (b.taxNumber = v), { inputmode: "numeric", placeholder: "12345678-2-41", autocomplete: "off" }), { path: "buyer.taxNumber", span: "" }),
+              h("div", { class: "f" }, h("span", { class: "lbl" }, " "), lookupBtn))
+          : null,
+        field(b.type === "company" ? "Cégnév" : "Név", input("b-name", b.name, (v) => (b.name = v), { autocomplete: "off", live: true }), { path: "buyer.name" }),
+        field("Irányítószám", input("b-pc", b.postcode, (v) => (b.postcode = v), { inputmode: "numeric", maxlength: "4", autocomplete: "off" }), { path: "buyer.postcode", span: "s2" }),
+        field("Település", input("b-city", b.city, (v) => (b.city = v), { autocomplete: "off" }), { path: "buyer.city", span: "s4" }),
+        field("Utca, házszám", input("b-addr", b.address, (v) => (b.address = v), { autocomplete: "off" }), { path: "buyer.address" }),
+        field("E-mail-cím", input("b-email", b.email, (v) => { b.email = v; drawPayment(); }, { type: "email", autocomplete: "off", placeholder: "Ide küldjük a számlát" }), { path: "buyer.email", hint: "Nem kötelező." }),
+      ),
+    );
+    drawBuyerPicker();
+  }
+
+  const lineTotal = (l) => (Number(l.price) || 0) * (Number(l.quantity) || 0);
+
+  function drawLines() {
+    const rows = form.lines.map((l, i) => {
+      const cell = (cls, path, el) => h("td", { class: "cell " + cls + (errors[`lines.${i}.${path}`] ? " bad" : "") }, el);
+      const num = (value, onInput, attrs) => h("input", { value, inputmode: "numeric", ...attrs,
+        oninput: (e) => { onInput(e.target.value.replace(/[^\d]/g, "")); e.target.value = e.target.value.replace(/[^\d]/g, ""); touch(); drawTotals(); } });
+      let vatCell;
+      if (me.seller.aam) {
+        vatCell = h("td", { class: "cell vat" }, h("div", { class: "aam", title: "Alanyi adómentes" }, "AAM"));
+      } else {
+        const sel = h("select", { "aria-label": "Áfakulcs", onchange: (e) => { l.vatRate = Number(e.target.value); touch(); drawLines(); drawSide(); } },
+          VAT_RATES.map((r) => h("option", { value: String(r), selected: l.vatRate === r }, r === 0 ? "0%" : r + "%")));
+        const extra = l.vatRate === 0
+          ? h("div", { class: "sub2" },
+              h("select", { "aria-label": "Mentesség oka", onchange: (e) => { l.exemption = e.target.value; touch(); drawLines(); } },
+                EXEMPTIONS.map(([v, t]) => h("option", { value: v, selected: l.exemption === v }, t))),
+              l.exemption === "TAM" ? h("input", { value: l.reason, placeholder: "Jogszabályhely, pl. Áfa tv. 85. § (1) e)", oninput: (e) => { l.reason = e.target.value; touch(); } }) : null)
+          : null;
+        vatCell = h("td", { class: "cell vat" }, sel, extra);
+      }
+      return h("tr", {},
+        cell("desc", "description", h("input", { value: l.description, placeholder: "Megnevezés", "aria-label": "Megnevezés",
+          oninput: (e) => { l.description = e.target.value; touch(); } })),
+        cell("qty", "quantity", num(String(l.quantity), (v) => (l.quantity = v), { "aria-label": "Mennyiség" })),
+        cell("unit", "unit", h("input", { value: l.unit, "aria-label": "Egység", oninput: (e) => { l.unit = e.target.value; touch(); } })),
+        cell("price", "unitPriceGross", num(l.price, (v) => (l.price = v), { placeholder: "0", "aria-label": "Bruttó egységár (Ft)" })),
+        vatCell,
+        h("td", { class: "r tot num", "data-line": i }, money(lineTotal(l))),
+        h("td", {}, form.lines.length > 1
+          ? h("button", { class: "btn ghost small", type: "button", "aria-label": `${i + 1}. tétel törlése`, onclick: () => { form.lines.splice(i, 1); touch(); drawLines(); drawSide(); } }, "Törlés")
+          : null),
+      );
+    });
+    fill(linesBox, 
+      h("h2", {}, "Tételek"),
+      errors.lines ? h("div", { class: "banner err" }, errors.lines) : null,
+      h("div", { class: "tablewrap" }, h("table", { class: "lines" },
+        h("thead", {}, h("tr", {},
+          h("th", {}, "Megnevezés"), h("th", {}, "Mennyiség"), h("th", {}, "Egység"), h("th", {}, "Bruttó egységár"),
+          h("th", {}, me.seller.aam ? "Áfa" : "Áfakulcs"), h("th", { class: "r" }, "Bruttó"), h("th", {}))),
+        h("tbody", {}, rows))),
+      h("div", { class: "inline" }, h("button", { class: "btn small", type: "button", onclick: () => { form.lines.push(newLine()); touch(); drawLines(); drawSide(); } }, "Új tétel")),
+    );
+  }
+
+  function drawTotals() {
+    form.lines.forEach((l, i) => {
+      const cell = linesBox.querySelector(`[data-line="${i}"]`);
+      if (cell) cell.textContent = money(lineTotal(l));
+    });
+    drawSide();
+  }
+
+  function drawPayment() {
+    const methodSel = h("select", { id: "p-method", onchange: (e) => {
+      form.paymentMethod = e.target.value;
+      if (!form.dueTouched) form.dueDate = form.paymentMethod === "transfer" ? addDaysIso(today, me.paymentTermDays) : today;
+      touch(); drawPayment(); drawSide();
+    } }, [["transfer", "Átutalás"], ["cash", "Készpénz"], ["card", "Bankkártya"], ["other", "Egyéb"]].map(([v, t]) => h("option", { value: v, selected: form.paymentMethod === v }, t)));
+    const canEmail = me.email && /\S+@\S+\.\S+/.test(form.buyer.email);
+    fill(paymentBox, 
+      h("h2", {}, "Fizetés és teljesítés"),
+      h("div", { class: "row" },
+        field("Fizetési mód", methodSel, { span: "s2" }),
+        field("Teljesítés dátuma", input("p-fulfil", form.fulfilmentDate, (v) => (form.fulfilmentDate = v), { type: "date" }), { path: "fulfilmentDate", span: "s2" }),
+        field("Fizetési határidő", input("p-due", form.dueDate, (v) => { form.dueDate = v; form.dueTouched = true; }, { type: "date", min: today, live: true }), { path: "dueDate", span: "s2" }),
+        field("Megjegyzés a számlán", h("textarea", { id: "p-note", rows: "2", placeholder: "Nem kötelező", oninput: (e) => { form.note = e.target.value; touch(); } }, form.note), { path: "note" }),
+        h("div", { class: "s6" },
+          h("label", { class: "check" },
+            h("input", { type: "checkbox", checked: form.sendEmail && canEmail, disabled: !canEmail, onchange: (e) => { form.sendEmail = e.target.checked; touch(); drawSide(); } }),
+            h("span", {},
+              "Küldés e-mailben a vevőnek, amint a NAV befogadta",
+              h("div", { class: "hint" }, !me.email ? "Ezen a szerveren nincs beállítva e-mail küldés." : canEmail ? `Címzett: ${form.buyer.email}` : "Ehhez add meg a vevő e-mail-címét.")))),
+      ),
+    );
+  }
+
+  function payload() {
+    const b = form.buyer;
+    const buyer = { type: b.type, name: b.name.trim(), postcode: b.postcode.trim(), city: b.city.trim(), address: b.address.trim() };
+    if (b.type === "company") buyer.taxNumber = b.taxNumber.trim();
+    if (b.email.trim()) buyer.email = b.email.trim();
+    const lines = form.lines.map((l) => {
+      const line = { description: l.description.trim(), quantity: Number(l.quantity) || 0, unit: l.unit.trim(), unitPriceGross: Number(l.price) || 0, vatRate: me.seller.aam ? 0 : l.vatRate };
+      if (!me.seller.aam && l.vatRate === 0) line.vatExemption = l.exemption === "TAM" ? { case: "TAM", reason: l.reason.trim() || undefined } : { case: l.exemption };
+      return line;
+    });
+    const body = { reference: form.reference, buyer, lines, paymentMethod: form.paymentMethod, fulfilmentDate: form.fulfilmentDate,
+      sendEmail: Boolean(form.sendEmail && me.email && buyer.email) };
+    if (form.dueDate) body.dueDate = form.dueDate;
+    if (form.note.trim()) body.note = form.note.trim();
+    return body;
+  }
+
+  function takeErrors(error) {
+    errors = {};
+    topError = error;
+    for (const d of error.details || []) {
+      const path = d.path || "";
+      const text = huMessage(path, d.message);
+      if (/^lines\.\d+$/.test(path)) errors[path + ".description"] = text;
+      errors[path] = errors[path] || text;
+    }
+    if (error.code === "TAXPAYER_INVALID") errors["buyer.taxNumber"] = describeError(error);
+    if (error.code === "DATE_INVALID") errors.dueDate = describeError(error);
+    drawAll();
+    errorBox.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function doPreview(button) {
+    button.disabled = true;
+    try {
+      const response = await api("/v1/invoices/preview", { method: "POST", body: payload(), raw: true });
+      const url = pdfUrl(await response.blob());
+      errors = {}; topError = undefined; drawAll();
+      const choice = await ask({
+        title: "Előnézet", wide: true,
+        body: h("iframe", { class: "dlg-pdf", src: url, title: "A számla előnézete" }),
+        buttons: [{ label: "Vissza a szerkesztéshez", value: "back" }, { label: "Kiállítás…", value: "issue", kind: "primary" }],
+      });
+      if (choice === "issue") confirmIssue();
+    } catch (error) {
+      takeErrors(error);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function confirmIssue() {
+    const body = payload();
+    const total = body.lines.reduce((s, l) => s + l.unitPriceGross * l.quantity, 0);
+    const choice = await ask({
+      title: "Számla kiállítása",
+      body: [
+        h("dl", { class: "facts" },
+          h("dt", {}, "Vevő"), h("dd", {}, body.buyer.name || "–"),
+          h("dt", {}, "Végösszeg"), h("dd", { class: "num" }, money(total)),
+          h("dt", {}, "Tételek"), h("dd", {}, String(body.lines.length)),
+          h("dt", {}, "E-mail"), h("dd", {}, body.sendEmail ? body.buyer.email : "nem küldjük")),
+        h("p", { class: "sub" }, me.environment === "production"
+          ? "Ez valódi számla: sorszámot kap, és azonnal beküldjük a NAV-nak. Utána csak sztornó számlával vonható vissza."
+          : "Teszt rendszer: a számla a NAV teszt rendszerébe megy."),
+      ],
+      buttons: [{ label: "Mégse", value: "no" }, { label: "Kiállítás és beküldés", value: "yes", kind: "primary" }],
+    });
+    if (choice !== "yes") return;
+    busy = true;
+    drawSide();
+    try {
+      const result = await api("/v1/invoices", { method: "POST", body });
+      dirty = false;
+      leaveGuard = undefined;
+      toast(result.alreadyIssued ? `Ezt már kiállítottuk: ${result.invoice.invoiceNumber}` : `Kiállítva: ${result.invoice.invoiceNumber}`);
+      location.hash = "#/i/" + result.invoice.id;
+    } catch (error) {
+      busy = false;
+      takeErrors(error);
+    }
+  }
+
+  function drawSide() {
+    const total = form.lines.reduce((s, l) => s + lineTotal(l), 0);
+    const previewBtn = h("button", { class: "btn", type: "button", disabled: busy, onclick: (e) => doPreview(e.currentTarget) }, "Előnézet");
+    const issueBtn = h("button", { class: "btn primary", type: "button", disabled: busy, onclick: confirmIssue }, busy ? "Kiállítás…" : "Kiállítás…");
+    fill(sideBox, 
+      h("div", { class: "sum-label" }, form.paymentMethod === "transfer" ? "Fizetendő" : "Végösszeg"),
+      h("div", { class: "sum-total num" }, money(total)),
+      me.seller.aam ? h("div", { class: "hint" }, "Alanyi adómentes, áfa nélkül") : null,
+      h("div", { class: "sum-rows" },
+        h("div", {}, h("span", {}, "Vevő"), h("span", {}, form.buyer.name || "–")),
+        h("div", {}, h("span", {}, "Fizetés"), h("span", {}, { transfer: "Átutalás", cash: "Készpénz", card: "Bankkártya", other: "Egyéb" }[form.paymentMethod])),
+        form.paymentMethod === "transfer" ? h("div", {}, h("span", {}, "Határidő"), h("span", { class: "num" }, huDate(form.dueDate))) : null),
+      h("div", { class: "stack" }, previewBtn, issueBtn),
+      h("p", { class: "hint" }, "Az előnézet nem számla: nem kap sorszámot, és nem megy a NAV-nak."),
+    );
+  }
+
+  function drawAll() {
+    fill(errorBox, topError ? errorBanner(topError) : "");
+    drawBuyer(); drawLines(); drawPayment(); drawSide();
+  }
+
+  fill(main, 
+    h("div", { class: "head" }, h("h1", {}, copyId ? "Új számla másolatból" : "Új számla"), h("span", { class: "sp" }), h("a", { class: "btn ghost", href: "#/" }, "Mégse")),
+    errorBox,
+    h("div", { class: "formgrid" },
+      h("div", { class: "card" },
+        h("div", { class: "section" }, buyerBox),
+        h("div", { class: "section" }, linesBox),
+        h("div", { class: "section" }, paymentBox)),
+      h("div", { class: "side" }, sideBox)),
+  );
+  drawAll();
+  if (!copyId) document.getElementById(form.buyer.type === "company" ? "b-tax" : "b-name")?.focus();
+}
+
+/* ---------- detail ---------- */
+
+async function showDetail(main, id) {
+  let invoice;
+  try {
+    ({ invoice } = await api("/v1/invoices/" + id));
+  } catch (error) {
+    fill(main, errorBanner(error), h("a", { class: "btn", href: "#/" }, "Vissza a listához"));
+    return;
+  }
+
+  const pdfFrame = h("iframe", { class: "pdf", title: `${invoice.invoiceNumber} PDF` });
+  let pdfBlob;
+  api(invoice.pdf, { raw: true })
+    .then((r) => r.blob())
+    .then((blob) => { pdfBlob = blob; pdfFrame.src = pdfUrl(blob); })
+    .catch((error) => pdfFrame.replaceWith(h("div", { class: "card pad" }, errorBanner(error))));
+
+  const statusCard = h("div", { class: "card pad" });
+  const actionsCard = h("div", { class: "card pad" });
+
+  function drawStatus() {
+    const nav = invoice.nav || {};
+    fill(statusCard, 
+      h("h2", {}, "Állapot"),
+      h("div", { class: "status-line" }, h("span", {}, "NAV"), navChip(nav, true)),
+      nav.transactionId ? h("div", { class: "status-note" }, `Tranzakció: ${nav.transactionId}`) : null,
+      nav.error ? h("div", { class: "status-note err" }, `${nav.error.code}: ${nav.error.message}`) : null,
+      h("div", { class: "status-line" }, h("span", {}, "E-mail"), emailChip(invoice.email)),
+      invoice.email ? h("div", { class: "status-note" }, invoice.email.to + (invoice.email.sentAt ? ` · ${huDateTime(invoice.email.sentAt)}` : "")) : null,
+    );
+  }
+
+  function download() {
+    if (!pdfBlob) return;
+    const a = h("a", { href: pdfUrl(pdfBlob), download: invoice.invoiceNumber.replaceAll("/", "-") + ".pdf" });
+    document.body.append(a); a.click(); a.remove();
+  }
+
+  async function resend() {
+    const to = h("input", { type: "email", value: (invoice.email && invoice.email.to) || invoice.buyer.email || "", id: "resend-to" });
+    const choice = await ask({
+      title: "Küldés e-mailben",
+      body: [h("div", { class: "f" }, h("label", { for: "resend-to" }, "Címzett"), to),
+        h("p", { class: "hint" }, "A számla PDF-jét küldjük el ide, a szokásos levélben.")],
+      buttons: [{ label: "Mégse", value: "no" }, { label: "Küldés", value: "yes", kind: "primary" }],
+      onOpen: () => to.focus(),
+    });
+    if (choice !== "yes") return;
+    try {
+      const result = await api(`/v1/invoices/${invoice.id}/resend`, { method: "POST", body: { to: to.value.trim() } });
+      toast(result.outcome === "sent" ? `Elküldve: ${result.to}` : `Nem sikerült elküldeni (${result.outcome}).`);
+      refresh();
+    } catch (error) {
+      toast(describeError(error));
+    }
+  }
+
+  async function doStorno() {
+    const choice = await ask({
+      title: `${invoice.invoiceNumber} sztornózása`,
+      body: h("p", {}, "Kiállítunk egy sztornó számlát, amely teljes egészében érvényteleníti ezt a számlát, és beküldjük a NAV-nak. Ez nem vonható vissza.",
+        invoice.email ? " A vevő e-mailben megkapja a sztornó számlát." : ""),
+      buttons: [{ label: "Mégse", value: "no" }, { label: "Sztornó kiállítása", value: "yes", kind: "primary" }],
+    });
+    if (choice !== "yes") return;
+    try {
+      const result = await api(`/v1/invoices/${invoice.id}/storno`, { method: "POST", body: {} });
+      toast(`Sztornó kiállítva: ${result.invoice.invoiceNumber}`);
+      location.hash = "#/i/" + result.invoice.id;
+    } catch (error) {
+      toast(describeError(error));
+    }
+  }
+
+  function drawActions() {
+    fill(actionsCard, 
+      h("h2", {}, "Műveletek"),
+      h("div", { class: "stack" },
+        h("button", { class: "btn", type: "button", onclick: download }, "PDF letöltése"),
+        me.email ? h("button", { class: "btn", type: "button", onclick: resend }, "Küldés e-mailben…") : null,
+        invoice.type === "normal" ? h("a", { class: "btn", href: "#/new?copy=" + invoice.id }, "Új számla ugyanezzel") : null,
+        invoice.type === "normal" && !invoice.reversedBy
+          ? h("button", { class: "btn danger", type: "button", onclick: doStorno }, "Sztornózás…")
+          : null),
+    );
+  }
+
+  async function refresh() {
+    try {
+      ({ invoice } = await api("/v1/invoices/" + id));
+      drawStatus();
+      drawActions();
+    } catch { /* the next poll tries again */ }
+    if (!settled(invoice)) pollTimer = setTimeout(refresh, 4000);
+  }
+
+  const b = invoice.buyer;
+  fill(main, 
+    h("div", { class: "head" },
+      h("a", { class: "btn ghost small", href: "#/" }, "Számlák"),
+      h("h1", { class: "num" }, invoice.invoiceNumber),
+      invoice.type === "storno" ? h("span", { class: "chip plain" }, "sztornó") : null),
+    invoice.reverses ? h("div", { class: "banner warn" }, `Ez a sztornó számla a(z) ${invoice.reverses} számú számlát érvényteleníti.`) : null,
+    invoice.reversedBy ? h("div", { class: "banner warn" }, "Ezt a számlát sztornóztuk: ",
+      h("a", { href: "#/i/" + invoice.reversedBy.id }, invoice.reversedBy.invoiceNumber)) : null,
+    h("div", { class: "detail" },
+      h("div", { class: "card pdfwrap" }, pdfFrame),
+      h("div", {},
+        h("div", { class: "card pad" },
+          h("div", { class: "sum-label" }, invoice.type === "storno" ? "Végösszeg" : invoice.paymentMethod === "transfer" ? "Fizetendő" : "Végösszeg"),
+          h("div", { class: "big num" }, money(invoice.totalGross)),
+          h("dl", { class: "facts" },
+            h("dt", {}, "Vevő"), h("dd", {}, b.name),
+            b.taxNumber ? [h("dt", {}, "Adószám"), h("dd", { class: "num" }, formatTax(b.taxNumber))] : null,
+            h("dt", {}, "Kelte"), h("dd", { class: "num" }, huDate(invoice.issueDate)),
+            h("dt", {}, "Teljesítés"), h("dd", { class: "num" }, huDate(invoice.fulfilmentDate)),
+            invoice.paymentMethod === "transfer" ? [h("dt", {}, "Határidő"), h("dd", { class: "num" }, huDate(invoice.dueDate))] : null,
+            h("dt", {}, "Kiállította"), h("dd", {}, String(invoice.createdBy || "").replace(/^ui:/, "")))),
+        statusCard,
+        actionsCard)),
+  );
+  drawStatus();
+  drawActions();
+  if (!settled(invoice)) pollTimer = setTimeout(refresh, 3000);
+}
+
+/* ---------- start ---------- */
+
+(async function start() {
+  try {
+    me = await api("/v1/me");
+  } catch (error) {
+    document.getElementById("main").replaceChildren(errorBanner(error));
+    return;
+  }
+  document.getElementById("seller-name").textContent = me.seller.name;
+  document.getElementById("who").textContent = me.actor.replace(/^ui:/, "");
+  document.getElementById("env-badge").hidden = me.environment === "production";
+  document.title = `Számlák · ${me.seller.name}`;
+  route();
+})();
+</script>
+</body>
+</html>

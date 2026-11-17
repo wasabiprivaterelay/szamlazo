@@ -1,12 +1,14 @@
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { secureHeaders } from "hono/secure-headers";
-import { and, count, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { NavError } from "@szamlazo/nav";
 import { advanceInvoice, sendInvoiceEmail, withCheckerHeld } from "../checker.js";
 import { alerts, auditLog, emailLog, invoices, jobRuns, navSubmissions } from "../db/schema.js";
-import { IssueRefused, issue, issueRequestSchema, noteSchema, storno } from "../invoices.js";
+import { IssueRefused, issue, issueRequestSchema, noteSchema, preview, storno } from "../invoices.js";
+import { uiPage } from "../ui.js";
+import { accessVerifier } from "./access.js";
 import type { Services } from "../services.js";
 import { sha256Of } from "../storage.js";
 import { exportInvoices } from "../tax-export.js";
@@ -14,8 +16,9 @@ import { bearerOf, verifyKey } from "./auth.js";
 import { rateLimiter } from "./rate-limit.js";
 
 /**
- * The HTTP API. Every route under /v1 needs an API key; /health does not,
- * and says nothing but whether the database answers. Errors have one shape:
+ * The HTTP API. Every route under /v1 needs an API key, or a person logged in
+ * through Cloudflare Access (see access.ts) using the web page at /; /health
+ * needs neither, and says nothing but whether the database answers. Errors have one shape:
  * { "error": { "code": "...", "message": "...", "details"?: [...] } }.
  */
 
@@ -30,9 +33,11 @@ export type AppOptions = {
   now?: () => number;
   /** Run after an invoice is issued, to report and email it soon; the checker catches up otherwise. */
   afterIssue?: (invoiceId: string) => void;
+  /** Fetching Cloudflare Access's keys; tests pass their own. */
+  accessFetch?: typeof fetch;
 };
 
-function problem(context: Context, status: 400 | 401 | 404 | 409 | 413 | 422 | 429 | 500 | 503, code: string, message: string, details?: unknown) {
+function problem(context: Context, status: 400 | 401 | 403 | 404 | 409 | 413 | 422 | 429 | 500 | 503, code: string, message: string, details?: unknown) {
   return context.json({ error: { code, message, ...(details === undefined ? {} : { details }) } }, status);
 }
 
@@ -63,9 +68,53 @@ export function createApp(services: Services, options: AppOptions = {}) {
     }
   });
 
+  const verifyPerson =
+    env.UI_USERS.length > 0 && env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD
+      ? accessVerifier({
+          teamDomain: env.ACCESS_TEAM_DOMAIN,
+          audience: env.ACCESS_AUD,
+          users: env.UI_USERS,
+          fetchImpl: options.accessFetch,
+          now,
+        })
+      : undefined;
+
+  /** The person using the web page, by their Access login; undefined for anyone else. */
+  async function personOf(context: Context): Promise<string | undefined> {
+    if (env.UI_DEV_USER && env.ENVIRONMENT === "development") return env.UI_DEV_USER.toLowerCase();
+    return verifyPerson?.(context.req.header("cf-access-jwt-assertion"));
+  }
+
+  app.get("/", async (context) => {
+    const person = await personOf(context);
+    if (!person) {
+      return context.html(
+        '<!doctype html><meta charset="utf-8"><title>Számlázó</title><p style="font-family:system-ui;margin:3rem">Ehhez a fiókhoz nincs hozzáférés.</p>',
+        403,
+      );
+    }
+    const page = uiPage();
+    context.header("Content-Security-Policy", page.csp);
+    context.header("Referrer-Policy", "no-referrer");
+    return context.html(page.html);
+  });
+
   app.use("/v1/*", async (context, next) => {
     const ip = clientIp(context);
-    const actor = verifyKey(bearerOf(context.req.header("authorization")), env.API_KEYS);
+    const authorization = context.req.header("authorization");
+    let actor = verifyKey(bearerOf(authorization), env.API_KEYS);
+    if (!actor && !authorization) {
+      const person = await personOf(context);
+      if (person) {
+        // Only the page sends this header, and a page on another site cannot
+        // add it without the browser asking first, so a link or a form
+        // elsewhere cannot make a logged-in person issue anything.
+        if (!["GET", "HEAD"].includes(context.req.method) && context.req.header("x-szamlazo-ui") !== "1") {
+          return problem(context, 403, "FORBIDDEN", "Changes from the web page must come from the page itself.");
+        }
+        actor = `ui:${person}`;
+      }
+    }
     if (!actor) {
       if (!failures(ip)) return problem(context, 429, "TOO_MANY_ATTEMPTS", "Too many requests with a wrong API key. Wait ten minutes.");
       log.warn({ ip, path: context.req.path }, "request with a missing or wrong API key");
@@ -169,24 +218,88 @@ export function createApp(services: Services, options: AppOptions = {}) {
     }
   });
 
+  app.post("/v1/invoices/preview", async (context) => {
+    const body = await context.req.json().catch(() => undefined);
+    if (body === undefined) return problem(context, 400, "INVALID_JSON", "The body must be JSON.");
+    const parsed = issueRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return problem(
+        context,
+        400,
+        "INVALID_REQUEST",
+        "The invoice request is not valid.",
+        parsed.error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message })),
+      );
+    }
+    try {
+      const pdf = await preview(settings, parsed.data, { lookupTaxpayer: services.lookupTaxpayer });
+      return new Response(pdf.slice().buffer as ArrayBuffer, {
+        headers: { "content-type": "application/pdf", "cache-control": "no-store", "x-content-type-options": "nosniff" },
+      });
+    } catch (error) {
+      if (error instanceof IssueRefused) return problem(context, 422, error.code, error.message);
+      throw error;
+    }
+  });
+
+  /** Who is asking, and what the page needs to know about this installation. */
+  app.get("/v1/me", (context) =>
+    context.json({
+      actor: context.get("actor"),
+      environment: env.ENVIRONMENT,
+      seller: { name: settings.seller.name, aam: Boolean(settings.sellerAam) },
+      invoicePrefix: settings.numberFormat.prefix,
+      paymentTermDays: settings.paymentTermDays,
+      email: Boolean(services.checker.mailer),
+      nav: Boolean(services.nav),
+    }),
+  );
+
+  /** Everyone invoiced before, newest details first: one entry per tax number, or per name for private buyers. */
+  app.get("/v1/buyers", async (context) => {
+    const rows = await db.execute<{ buyer: Record<string, string | undefined>; email_to: string | null }>(sql`
+      select distinct on (coalesce(${invoices.buyerSnapshot}->>'taxNumber', lower(${invoices.buyerSnapshot}->>'name')))
+        ${invoices.buyerSnapshot} as buyer, ${invoices.emailTo} as email_to
+      from ${invoices}
+      where ${invoices.type} = 'normal'
+      order by coalesce(${invoices.buyerSnapshot}->>'taxNumber', lower(${invoices.buyerSnapshot}->>'name')), ${invoices.createdAt} desc
+      limit 500`);
+    const buyers = [...rows]
+      .map(({ buyer, email_to }) => ({
+        type: buyer.taxNumber ? ("company" as const) : ("private" as const),
+        name: buyer.name ?? "",
+        postcode: buyer.postcode ?? "",
+        city: buyer.city ?? "",
+        address: buyer.address ?? "",
+        taxNumber: buyer.taxNumber,
+        email: email_to ?? buyer.email,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "hu"));
+    return context.json({ buyers });
+  });
+
   app.get("/v1/invoices", async (context) => {
     const query = z
       .object({
         from: isoDate.optional(),
         to: isoDate.optional(),
         number: z.string().max(40).optional(),
+        /** Part of an invoice number or a buyer's name. */
+        q: z.string().trim().max(100).optional(),
         reference: z.string().max(100).optional(),
         limit: z.coerce.number().int().min(1).max(200).default(50),
         offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
       })
       .safeParse(context.req.query());
     if (!query.success) return problem(context, 400, "INVALID_QUERY", "Check from, to, number, reference, limit and offset.");
-    const { from, to, number, reference, limit, offset } = query.data;
+    const { from, to, number, q, reference, limit, offset } = query.data;
+    const pattern = q ? `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : undefined;
     const where = and(
       from ? gte(invoices.issueDate, from) : undefined,
       to ? lte(invoices.issueDate, to) : undefined,
       number ? eq(invoices.invoiceNumber, number) : undefined,
       reference ? eq(invoices.reference, reference) : undefined,
+      pattern ? or(ilike(invoices.invoiceNumber, pattern), sql`${invoices.buyerSnapshot}->>'name' ilike ${pattern}`) : undefined,
     );
     const rows = await db.select().from(invoices).where(where).orderBy(desc(invoices.createdAt)).limit(limit).offset(offset);
     const [total] = await db.select({ value: count() }).from(invoices).where(where);

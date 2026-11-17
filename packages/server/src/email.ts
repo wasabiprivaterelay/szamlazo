@@ -11,6 +11,8 @@ export type Email = {
   subject: string;
   /** Plain text: every mail program shows it, and nothing in it can be mistaken for markup. */
   text: string;
+  /** Shown instead of the text by mail programs that draw HTML. Every value in it must be escaped. */
+  html?: string;
   attachments?: readonly Attachment[];
 };
 
@@ -47,6 +49,7 @@ export function brevoMailer(options: BrevoOptions): Mailer {
         to: [{ email: email.to }],
         subject: `${options.subjectPrefix ?? ""}${email.subject}`,
         textContent: email.text,
+        htmlContent: email.html,
         attachment: email.attachments?.map((file) => ({
           name: file.name,
           content: Buffer.from(file.content).toString("base64"),

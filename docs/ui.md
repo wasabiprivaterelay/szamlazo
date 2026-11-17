@@ -1,22 +1,25 @@
-# Building a UI
+# The web page
 
-szamlazo is an API first. A UI is the natural next piece: a place for a
-person to look up an invoice, issue one by hand, reverse one, resend an email
-and see what needs attention. This is the recommended design, so that adding
-it does not weaken anything the server already guarantees.
+The server has a web page for people: the invoice list with search, a form
+for a new invoice (with a preview that issues nothing), and each invoice with
+its PDF, NAV and email status, resending and reversing. It is served at `/`
+on its own hostname, behind its own Cloudflare Access application, for the
+people named in `UI_USERS`.
 
 ## The rule: no API key in a browser
 
 An API key is a machine's credential. Put it in browser code and anyone who
-opens the page has it. A UI therefore authenticates **people**, separately
+opens the page has it. The page therefore authenticates **people**, separately
 from machines:
 
 ```
 browser ──▶ Cloudflare Access ──▶ tunnel ──▶ server
-            (login: your Google      admin.example.hu: checks the
-             account or an emailed    Access JWT, takes the person's
-             one-time code)           email as the actor
+            (login: an emailed       admin.example.hu: checks the
+             one-time code)           Access JWT, takes the person's
+                                      email as the actor
 ```
+
+## Setting it up
 
 1. **A second hostname**, `admin.example.hu`, on the same tunnel
    ([production.md](production.md#61-the-tunnel), add a public hostname, same
@@ -37,64 +40,67 @@ browser ──▶ Cloudflare Access ──▶ tunnel ──▶ server
    - **In the policy**, Include → selector **Emails**, then each address as
      its own entry. Not **Emails ending in**: `gmail.com` there would let in
      every Gmail user.
-3. **The server verifies Access itself.** Cloudflare adds a signed JWT to
-   every request it lets through (`Cf-Access-Jwt-Assertion`). The server checks
-   its signature against
-   `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`, its audience
-   (`aud`) against the application's AUD tag, and its expiry, and takes the
-   email from it. Requests to the admin hostname without a valid JWT are
-   refused, so even someone who reaches the server another way gets nothing.
-   The email becomes the `actor` in the audit log, so the log says which
-   person reversed an invoice, not just "admin".
+3. **Two values from the dashboard** go into `szamlazo.env`:
+   - `ACCESS_TEAM_DOMAIN`: your team domain, `<team>.cloudflareaccess.com`
+     (Zero Trust → **Settings → Custom pages**, or the address of any Access
+     login page).
+   - `ACCESS_AUD`: the new application's **Application Audience (AUD) Tag**,
+     64 hexadecimal characters, on the application's **Overview** (older
+     dashboards: **Basic information**).
 
-   New settings for this: `ADMIN_HOST`, `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`,
-   `ADMIN_EMAILS` (a second allow-list in the server, so a mistake in the
-   Access policy alone does not open the door).
+   And who may use it, the same addresses as in the policy:
+   `UI_USERS=anna@example.hu,bela@example.hu`. Then, from `deploy/`:
+   `docker compose up -d` and `docker compose exec server node dist/cli.js doctor`.
+4. Open `https://admin.example.hu/`, type your email, enter the code.
 
-4. **Same origin.** The server serves the UI's static files on the admin
-   hostname and the UI calls `/v1/…` there, so there is no CORS to configure
-   and cookies never cross origins.
+## How the server checks a person
+
+Cloudflare adds a signed JWT to every request it lets through
+(`Cf-Access-Jwt-Assertion`). The server checks its signature against
+`https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`, its issuer, its
+audience (`aud`) against `ACCESS_AUD`, and its expiry, and takes the email
+from it, which must be on `UI_USERS` (a second allow-list in the server, so a
+mistake in the Access policy alone does not open the door). Requests without
+such a token get no page and no API, so even someone who reaches the server
+another way gets nothing. The API hostname's own Access application has a
+different AUD, so a token from there is never accepted as a person.
+
+The email becomes the `actor` (`ui:anna@example.hu`) in the audit log and
+in each invoice's `createdBy`, so the log says which person issued or
+reversed an invoice.
+
+For trying the page on your own computer, `ENVIRONMENT=development` with
+`UI_DEV_USER=you@example.hu` treats every request as that person, with no
+Access in front. The server refuses to start with it in any other
+environment.
 
 ## Browser hardening
 
-- `Content-Security-Policy: default-src 'self'; frame-ancestors 'none';
-  base-uri 'none'; form-action 'self'`. No inline scripts, no third-party
-  scripts, no fonts or analytics from elsewhere.
-- **CSRF:** state-changing requests from the UI carry a custom header
-  (`X-Requested-With: szamlazo`). A cross-site form cannot set one, and the
-  server refuses `POST` on the admin host without it.
-- Destructive actions (storno) need a confirmation that repeats the invoice
-  number, and send the same `reference` on retry, so a double click cannot
-  reverse twice (the API already guarantees once).
+- `Content-Security-Policy: default-src 'none'; script-src 'nonce-…';
+  style-src 'nonce-…'; connect-src 'self'; frame-src blob:;
+  frame-ancestors 'none'; base-uri 'none'; form-action 'none'`, with a new
+  nonce for every page load. The page is one file with no third-party
+  scripts, fonts or analytics, and builds everything with `textContent`,
+  never HTML, so nothing in an invoice can run.
+- **CSRF:** every change the page makes (`POST`) carries the header
+  `X-Szamlazo-UI: 1`. A form or script on another site cannot add it without
+  the browser asking first, and the server refuses a person's `POST`
+  without it.
+- **No double issuing:** the new-invoice form sends a `reference` made when
+  the form opens, so a double click or a retry after a lost answer returns
+  the same invoice instead of issuing a second one.
+- Issuing and reversing each ask for confirmation, stating that the invoice
+  goes to NAV at once and can only be undone with a storno.
 
-## Screens
+## What the page does
 
 | Screen | API |
 |---|---|
-| **Overview**: invoices waiting for NAV, failing emails, open alerts, last nightly runs | `GET /v1/status` |
-| **Invoices**: search by number, reference, date range; newest first; paging | `GET /v1/invoices` |
-| **Invoice**: every field, NAV status and messages, email status, PDF preview and download | `GET /v1/invoices/{id}`, `…/pdf` |
-| **New invoice**: buyer (private or company), lines, payment; for a company, typing the tax number fills the name and address from NAV | `GET /v1/taxpayers/{n}`, `POST /v1/invoices` |
-| **Reverse**: from an invoice, with a reason | `POST /v1/invoices/{id}/storno` |
-| **Resend**: from an invoice, to its address or another | `POST /v1/invoices/{id}/resend` |
-| **Export**: a date or number range, downloads the zip | `GET /v1/exports/inspection` |
+| **Invoices**: newest first, search by number or buyer, NAV and email status | `GET /v1/invoices?q=…` |
+| **New invoice**: buyer (company or private), with "fill from NAV" for a tax number and a list of earlier buyers; lines; payment; email | `GET /v1/taxpayers/{n}`, `GET /v1/buyers`, `POST /v1/invoices` |
+| **Preview**: the PDF exactly as it would be, marked "ELŐNÉZET – nem számla", with no number drawn and nothing stored or reported | `POST /v1/invoices/preview` |
+| **Invoice**: the PDF, the totals, NAV status and messages, email status; download, resend, "new invoice from this one", storno | `GET /v1/invoices/{id}`, `…/pdf`, `…/resend`, `…/storno` |
 
-The new-invoice form should compute line totals as the server does (gross ×
-quantity; net = gross × 100 / (100 + rate), rounded half away from zero) to
-show them while typing, but always display what the server returns as the
-truth.
-
-## Technology
-
-Small and boring is right here: a handful of screens, a few users.
-
-- **Vite + React + TypeScript**, with TanStack Query for requests. Or plain
-  TypeScript with no framework; both are fine at this size.
-- A new workspace package, `packages/admin`, built to static files that the
-  server serves from the image. One deployment, one version.
-- Types for requests and responses imported from `@szamlazo/server`'s zod
-  schemas, so the UI and the API cannot drift apart.
-- Hungarian interface text; English code.
-
-Doing it this way changes nothing for the machine clients: the API, its keys
-and the `szamlazo.example.hu` hostname stay exactly as they are.
+The page and the API share one origin, so there is no CORS to configure.
+`GET /v1/me` tells the page who is logged in and how the server is set up
+(AAM, payment term, whether email and NAV are configured).

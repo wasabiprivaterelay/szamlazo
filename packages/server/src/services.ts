@@ -94,6 +94,7 @@ export function servicesFromEnv(env: Env, db: Database, log: Logger): Services {
       undelivered: env.BREVO_API_KEY ? brevoUndelivered(env.BREVO_API_KEY) : undefined,
       numberFormat: { prefix: env.INVOICE_PREFIX },
       isTest,
+      emailBrand: { accent: env.INVOICE_ACCENT_COLOUR },
       production: env.ENVIRONMENT === "production",
       alertTo: env.ALERT_EMAIL,
       archiveTo: env.INVOICE_ARCHIVE_EMAIL,

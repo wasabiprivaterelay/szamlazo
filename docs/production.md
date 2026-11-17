@@ -641,6 +641,11 @@ all:
 
 [api.md](api.md) has every field and error.
 
+### The web page
+
+For issuing invoices by hand there is a web page; [ui.md](ui.md) sets it up
+on a second hostname with its own Access application.
+
 ## 13. Go-live checklist
 
 - [ ] The NAV test system round trip worked

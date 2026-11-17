@@ -191,10 +191,26 @@ checker keeps trying and alerts you after an hour.
 | `from`, `to` | Issue dates, inclusive |
 | `number` | One invoice number, e.g. `SZ2026/00001` |
 | `reference` | Your reference |
+| `q` | Part of an invoice number or of the buyer's name, any case |
 | `limit` | 1–200, default 50 |
 | `offset` | For paging |
 
 Newest first. Returns `{ "total": 132, "invoices": [ … ] }`.
+
+## Preview an invoice
+
+`POST /v1/invoices/preview` with the same body as issuing. Checked exactly
+as issuing is checked, including the NAV tax-number lookup, and answered with
+the PDF it would produce, marked `ELŐNÉZET – nem számla` where the number
+goes. No number is drawn, nothing is stored and nothing goes to NAV. Errors
+are the same as for issuing.
+
+## Earlier buyers
+
+`GET /v1/buyers`: everyone invoiced before, one entry per tax number (per name
+for private buyers) with the details of their latest invoice, sorted by name.
+Returns `{ "buyers": [ { "type", "name", "postcode", "city", "address",
+"taxNumber"?, "email"? } ] }`.
 
 ## Get one invoice
 

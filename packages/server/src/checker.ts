@@ -7,7 +7,7 @@ import type { Database } from "./db/client.js";
 import { alerts, emailLog, invoices, jobRuns, navSubmissions } from "./db/schema.js";
 import { budapestDate, budapestHour, monthBounds, previousMonth } from "./dates.js";
 import type { Attachment, Mailer } from "./email.js";
-import { alertEmail, alertResolvedEmail, archiveEmail, invoiceEmail } from "./messages.js";
+import { alertEmail, alertResolvedEmail, archiveEmail, invoiceEmail, type EmailBrand } from "./messages.js";
 import { advanceReport } from "./nav-reporting.js";
 import { sha256Of, type InvoiceStore } from "./storage.js";
 import { exportInvoices } from "./tax-export.js";
@@ -37,6 +37,8 @@ export type CheckerDeps = {
   numberFormat: NumberFormat;
   /** Not production: every email says it is a test. */
   isTest: boolean;
+  /** The invoice email's colours. */
+  emailBrand?: EmailBrand;
   production: boolean;
   alertTo?: string;
   archiveTo?: string;
@@ -73,7 +75,7 @@ function emailRetryMinutes(attempts: number): number {
 async function sendOnce(
   deps: CheckerDeps,
   entry: { key: string; template: string; to: string; invoiceId?: string },
-  build: () => Promise<{ subject: string; text: string; attachments?: readonly Attachment[] }>,
+  build: () => Promise<{ subject: string; text: string; html?: string; attachments?: readonly Attachment[] }>,
 ): Promise<SendOutcome> {
   const { db, mailer } = deps;
   if (!mailer) return "no mailer";
@@ -174,6 +176,7 @@ export async function sendInvoiceEmail(
             reverses,
           },
           deps.isTest,
+          deps.emailBrand,
         ),
         attachments: [{ name: `${invoice.invoiceNumber.replaceAll("/", "-")}.pdf`, content: pdf }],
       };

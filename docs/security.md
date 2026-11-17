@@ -131,7 +131,7 @@ image holds production dependencies only, installed with `--ignore-scripts`.
   and the `docker` group to yourself.
 - **Your NAV portal login.** Whoever has it can create technical users.
 - **Backups**: run the restore drill. Keep the restic password off the server.
-- **A UI** you build is a new way in: follow [ui.md](ui.md).
+- **The web page** is a second way in, for people: [ui.md](ui.md) says how it is locked down.
 - **GDPR.** You are the controller. Invoices are kept for eight years by law
   (Számv. tv. 169. §), which is the basis for keeping buyers' data that long;
   mention it in your privacy notice. Brevo, Cloudflare and your VPS provider

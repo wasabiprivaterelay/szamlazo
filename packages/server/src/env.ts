@@ -58,6 +58,37 @@ const schema = z.object({
     ),
   ),
   /**
+   * The web page for people, behind Cloudflare Access. UI_USERS lists who may
+   * use it (their Access login emails); ACCESS_TEAM_DOMAIN and ACCESS_AUD let
+   * the server check Access's signed login itself, so a request that did not
+   * come through Access is refused even if it reaches the server.
+   */
+  UI_USERS: z.preprocess(
+    (value) =>
+      typeof value === "string"
+        ? value
+            .split(",")
+            .map((entry) => entry.trim().toLowerCase())
+            .filter(Boolean)
+        : [],
+    z.array(z.email("each UI_USERS entry must be an email address")),
+  ),
+  ACCESS_TEAM_DOMAIN: z.preprocess(
+    blankIsAbsent,
+    z
+      .string()
+      .trim()
+      .toLowerCase()
+      .regex(/^[a-z0-9-]+\.cloudflareaccess\.com$/, "ACCESS_TEAM_DOMAIN looks like yourteam.cloudflareaccess.com")
+      .optional(),
+  ),
+  ACCESS_AUD: z.preprocess(
+    blankIsAbsent,
+    z.string().trim().toLowerCase().regex(/^[0-9a-f]{64}$/, "ACCESS_AUD is the application's 64-character Audience (AUD) tag").optional(),
+  ),
+  /** Development only: every web page request is this person, with no Access in front. */
+  UI_DEV_USER: optionalEmail,
+  /**
    * The header holding the client's real address when a proxy stands in
    * front (cf-connecting-ip behind Cloudflare). Unset: the socket address.
    * Set it only when the proxy is the only way in, or anyone can forge it.
@@ -172,6 +203,10 @@ export function readEnv(source: EnvSource = process.env): Env {
     if (missing.length > 0) problems.push(`STORAGE=s3 needs ${missing.join(", ")}`);
   }
   if (env.BREVO_API_KEY && !env.EMAIL_FROM) problems.push("BREVO_API_KEY is set but EMAIL_FROM is not");
+  if (env.UI_DEV_USER && env.ENVIRONMENT !== "development") problems.push("UI_DEV_USER is only for ENVIRONMENT=development");
+  if (env.UI_USERS.length > 0 && !env.UI_DEV_USER && (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD)) {
+    problems.push("UI_USERS needs ACCESS_TEAM_DOMAIN and ACCESS_AUD, so the server can check each login itself");
+  }
   const names = env.API_KEYS.map((key) => key.name);
   if (new Set(names).size !== names.length) problems.push("API_KEYS has two keys with the same name");
 

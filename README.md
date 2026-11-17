@@ -197,7 +197,7 @@ npm run szamlazo -- doctor        # every setting, checked
 | [docs/operations.md](docs/operations.md) | Day-to-day running: alerts, storno, exports, backups, upgrades |
 | [docs/security.md](docs/security.md) | Threat model, what protects what, and the audit of this version |
 | [docs/limits.md](docs/limits.md) | What this version does not do, and the legal ground it stands on |
-| [docs/ui.md](docs/ui.md) | How to build a UI on top, and how to secure it |
+| [docs/ui.md](docs/ui.md) | The web page for issuing invoices by hand: setting it up, and how it is secured |
 | [.env.example](.env.example) | Every setting, with where its value comes from |
 
 ## Development
