@@ -12,8 +12,11 @@ import { migrate } from "./db/migrate.js";
 import { ConfigError, readEnv, type Env } from "./env.js";
 import { newApiKey } from "./http/auth.js";
 import { createLogger } from "./logger.js";
-import { advanceInvoice, monthlyArchive, reconcile, runChecks } from "./checker.js";
-import { issue } from "./invoices.js";
+import { advanceInvoice, monthlyArchive, reconcile, runChecks, withCheckerHeld } from "./checker.js";
+import { eq } from "drizzle-orm";
+import { invoices } from "./db/schema.js";
+import { IssueRefused, issue, issueRequestSchema } from "./invoices.js";
+import { sha256Of } from "./storage.js";
 import { VERSION, servicesFromEnv } from "./services.js";
 import { exportInvoices } from "./tax-export.js";
 
@@ -23,6 +26,8 @@ const USAGE = `usage: szamlazo <command>
   migrate                      bring the database schema up to date
   doctor                       check every setting: database, storage, NAV, email
   test-invoice [--email <a>]   issue a sample invoice and follow it through NAV (not in production)
+  issue < request.json         issue a real invoice from an API request body read on standard input
+  pdf <number> > file.pdf      an issued invoice's PDF, e.g. pdf SZ2026/00001 > SZ2026-00001.pdf
   status                       what is waiting: invoices not yet at NAV, failing emails, alerts
   checks                       run one checker pass now
   reconcile                    run the nightly comparison with NAV now
@@ -110,6 +115,58 @@ async function main() {
         const progress = await advanceInvoice({ ...services.checker, navPollIntervalMs: 3000 }, invoice.id);
         console.log(`NAV: ${progress.nav}${progress.email ? `, email: ${progress.email}` : ""}`);
         if (progress.nav !== "accepted") console.log("the checker keeps following it; see `status` in a few minutes.");
+        return;
+      }
+
+      case "issue": {
+        if (process.stdin.isTTY) fail("give the request on standard input: … issue < request.json", 64);
+        const chunks: Buffer[] = [];
+        for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+        let body: unknown;
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        } catch {
+          fail("the request is not valid JSON", 65);
+        }
+        const parsed = issueRequestSchema.safeParse(body);
+        if (!parsed.success) {
+          fail(`the request is not valid:\n${parsed.error.issues.map((i) => `  ${i.path.join(".") || "(body)"}: ${i.message}`).join("\n")}`, 65);
+        }
+        try {
+          const { invoice, alreadyIssued } = await issue(db, services.store, services.settings, parsed.data, {
+            actor: "cli",
+            lookupTaxpayer: services.lookupTaxpayer,
+          });
+          console.log(
+            alreadyIssued
+              ? `already issued: ${invoice.invoiceNumber} (same reference), nothing new was made`
+              : `issued ${invoice.invoiceNumber}: gross ${invoice.totalGross} Ft`,
+          );
+          if (!alreadyIssued && services.nav) {
+            console.log(`reporting it to NAV's ${env.nav.environment} system …`);
+            // Held like the API's report, so the running checker never sends it at the same time.
+            const progress = await withCheckerHeld(db, () =>
+              advanceInvoice({ ...services.checker, navPollIntervalMs: 3000 }, invoice.id),
+            );
+            console.log(`NAV: ${progress.nav}${progress.email ? `, email: ${progress.email}` : ""}`);
+            if (progress.nav !== "accepted") console.log("the checker keeps following it; see `status` in a few minutes.");
+          }
+        } catch (error) {
+          if (error instanceof IssueRefused) fail(`refused (${error.code}): ${error.message}`, 65);
+          throw error;
+        }
+        return;
+      }
+
+      case "pdf": {
+        const [number] = rest;
+        if (!number) fail("usage: pdf <invoice number> > file.pdf", 64);
+        if (process.stdout.isTTY) fail("the PDF would be printed on the screen; redirect it: … pdf SZ2026/00001 > SZ2026-00001.pdf", 64);
+        const [row] = await db.select().from(invoices).where(eq(invoices.invoiceNumber, number));
+        if (!row) fail(`no invoice ${number}`, 66);
+        const pdf = await services.store.get(row.pdfPath);
+        if (sha256Of(pdf) !== row.pdfSha256) fail("the stored PDF no longer matches the one issued; not written", 70);
+        process.stdout.write(pdf);
         return;
       }
 
