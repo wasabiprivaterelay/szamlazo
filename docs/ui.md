@@ -99,8 +99,30 @@ environment.
 | **Invoices**: newest first, search by number or buyer, NAV and email status | `GET /v1/invoices?q=…` |
 | **New invoice**: buyer (company or private), with "fill from NAV" for a tax number and a list of earlier buyers; lines; payment; email | `GET /v1/taxpayers/{n}`, `GET /v1/buyers`, `POST /v1/invoices` |
 | **Preview**: the PDF exactly as it would be, marked "ELŐNÉZET – nem számla", with no number drawn and nothing stored or reported | `POST /v1/invoices/preview` |
-| **Invoice**: the PDF, the totals, NAV status and messages, email status; download, resend, "new invoice from this one", storno | `GET /v1/invoices/{id}`, `…/pdf`, `…/resend`, `…/storno` |
+| **Invoice**: the PDF, the totals, NAV status and messages, email status, its history; download, resend, "sent by hand", "new invoice from this one", storno | `GET /v1/invoices/{id}`, `…/pdf`, `…/history`, `…/resend`, `…/sent-manually`, `…/storno` |
+| **Napló**: the activity log, filtered by person, event and date | `GET /v1/audit` |
 
 The page and the API share one origin, so there is no CORS to configure.
 `GET /v1/me` tells the page who is logged in and how the server is set up
 (AAM, payment term, whether email and NAV are configured).
+
+## The activity log
+
+Everything is recorded in `audit_log`, a table the database refuses to
+change or delete rows in (migration 0001), so the log cannot be tidied up
+afterwards, not even by hand:
+
+| Event | Who | Details |
+|---|---|---|
+| `login`, `login refused` | the person | address, country, browser, when the login expires; once per Access login |
+| `invoice issued`, `storno issued` | person, API key or `cli` | number, buyer, total, email address, web page / API / command, address |
+| `issue refused` | person or API key | why (`VAT_INVALID`, `INVALID_REQUEST`, …) |
+| `inspection export` | person or API key | address, which invoices |
+| `email resent`, `email sent manually` | person or API key | to whom, note |
+| `nav sent`, `nav accepted`, `nav accepted with warnings`, `nav rejected`, `nav send failed` | `system` | transaction id, NAV's messages, attempt |
+| `email sent`, `email failed`, `email bounced` | `system` | to whom, the provider's error |
+
+The web page shows it under **Napló**, and each invoice shows its own part
+under **Előzmények**. Machines read it with `GET /v1/audit` (filters `actor`,
+`action`, `entity`, `from`, `to`, `limit`, `offset`) and
+`GET /v1/invoices/{id}/history`.

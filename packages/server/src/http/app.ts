@@ -8,7 +8,8 @@ import { advanceInvoice, sendInvoiceEmail, withCheckerHeld } from "../checker.js
 import { alerts, auditLog, emailLog, invoices, jobRuns, navSubmissions } from "../db/schema.js";
 import { IssueRefused, issue, issueRequestSchema, noteSchema, preview, storno } from "../invoices.js";
 import { uiPage } from "../ui.js";
-import { accessVerifier } from "./access.js";
+import { accessVerifier, type AccessPerson } from "./access.js";
+import { audit } from "../audit.js";
 import type { Services } from "../services.js";
 import { sha256Of } from "../storage.js";
 import { exportInvoices } from "../tax-export.js";
@@ -39,6 +40,18 @@ export type AppOptions = {
 
 function problem(context: Context, status: 400 | 401 | 403 | 404 | 409 | 413 | 422 | 429 | 500 | 503, code: string, message: string, details?: unknown) {
   return context.json({ error: { code, message, ...(details === undefined ? {} : { details }) } }, status);
+}
+
+function entryView(entry: typeof auditLog.$inferSelect) {
+  return {
+    id: entry.id,
+    at: entry.createdAt,
+    actor: entry.actor,
+    action: entry.action,
+    entity: entry.entity,
+    entityId: entry.entityId,
+    details: entry.details ?? {},
+  };
 }
 
 export function createApp(services: Services, options: AppOptions = {}) {
@@ -80,16 +93,60 @@ export function createApp(services: Services, options: AppOptions = {}) {
       : undefined;
 
   /** The person using the web page, by their Access login; undefined for anyone else. */
-  async function personOf(context: Context): Promise<string | undefined> {
-    if (env.UI_DEV_USER && env.ENVIRONMENT === "development") return env.UI_DEV_USER.toLowerCase();
-    return verifyPerson?.(context.req.header("cf-access-jwt-assertion"));
+  async function personOf(context: Context): Promise<AccessPerson | undefined> {
+    if (env.UI_DEV_USER && env.ENVIRONMENT === "development") {
+      return { email: env.UI_DEV_USER.toLowerCase(), allowed: true, issuedAt: 0, expiresAt: 0 };
+    }
+    const person = await verifyPerson?.(context.req.header("cf-access-jwt-assertion"));
+    if (person) await noteLogin(person, context);
+    return person;
+  }
+
+  /** Where a request came from, for the activity log. */
+  function originOf(context: Context, via?: string) {
+    const actor = context.get("actor") as string | undefined;
+    return {
+      via: via ?? (actor?.startsWith("ui:") ? "web" : "api"),
+      ip: clientIp(context),
+      country: context.req.header("cf-ipcountry")?.slice(0, 2),
+    };
+  }
+
+  // Each Access login carries its own token, so the first request with a new
+  // one is the login. Remembered here so that is one lookup per login, not
+  // per request; the database decides after a restart.
+  const loginsSeen = new Set<string>();
+  async function noteLogin(person: AccessPerson, context: Context) {
+    const key = `${person.email}:${person.issuedAt}`;
+    if (loginsSeen.has(key)) return;
+    loginsSeen.add(key);
+    if (loginsSeen.size > 10_000) loginsSeen.clear();
+    const [already] = await db
+      .select({ id: auditLog.id })
+      .from(auditLog)
+      .where(and(eq(auditLog.entity, "session"), eq(auditLog.entityId, key)))
+      .limit(1);
+    if (already) return;
+    await audit(db, {
+      entity: "session",
+      entityId: key,
+      action: person.allowed ? "login" : "login refused",
+      actor: `ui:${person.email}`,
+      details: {
+        ip: clientIp(context),
+        country: person.country ?? context.req.header("cf-ipcountry")?.slice(0, 2),
+        userAgent: context.req.header("user-agent")?.slice(0, 200),
+        loggedInAt: person.issuedAt ? new Date(person.issuedAt * 1000).toISOString() : undefined,
+        expiresAt: person.expiresAt ? new Date(person.expiresAt * 1000).toISOString() : undefined,
+      },
+    });
   }
 
   app.get("/", async (context) => {
     const person = await personOf(context);
-    if (!person) {
+    if (!person?.allowed) {
       return context.html(
-        '<!doctype html><meta charset="utf-8"><title>Számlázó</title><p style="font-family:system-ui;margin:3rem">Ehhez a fiókhoz nincs hozzáférés.</p>',
+        '<!doctype html><meta charset="utf-8"><title>Számlázó</title><p style="font-family:system-ui;margin:3rem">Ennek a fióknak nincs hozzáférése ehhez az oldalhoz.</p>',
         403,
       );
     }
@@ -105,14 +162,14 @@ export function createApp(services: Services, options: AppOptions = {}) {
     let actor = verifyKey(bearerOf(authorization), env.API_KEYS);
     if (!actor && !authorization) {
       const person = await personOf(context);
-      if (person) {
+      if (person?.allowed) {
         // Only the page sends this header, and a page on another site cannot
         // add it without the browser asking first, so a link or a form
         // elsewhere cannot make a logged-in person issue anything.
         if (!["GET", "HEAD"].includes(context.req.method) && context.req.header("x-szamlazo-ui") !== "1") {
           return problem(context, 403, "FORBIDDEN", "Changes from the web page must come from the page itself.");
         }
-        actor = `ui:${person}`;
+        actor = `ui:${person.email}`;
       }
     }
     if (!actor) {
@@ -142,6 +199,12 @@ export function createApp(services: Services, options: AppOptions = {}) {
     const [original] = row.originalInvoiceId
       ? await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq(invoices.id, row.originalInvoiceId))
       : [];
+    const [manual] = await db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.entity, "invoice"), eq(auditLog.entityId, row.id), eq(auditLog.action, "email sent manually")))
+      .orderBy(desc(auditLog.createdAt))
+      .limit(1);
     const [reversedBy] = await db
       .select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber })
       .from(invoices)
@@ -177,6 +240,9 @@ export function createApp(services: Services, options: AppOptions = {}) {
       email: row.emailTo
         ? { to: row.emailTo, status: email?.status ?? "queued", sentAt: email?.sentAt ?? null }
         : null,
+      manualEmail: manual
+        ? { to: (manual.details as { to?: string } | null)?.to ?? null, at: manual.createdAt, by: manual.actor }
+        : null,
       pdf: `/v1/invoices/${row.id}/pdf`,
       createdBy: row.createdBy,
       createdAt: row.createdAt,
@@ -195,6 +261,13 @@ export function createApp(services: Services, options: AppOptions = {}) {
     if (body === undefined) return problem(context, 400, "INVALID_JSON", "The body must be JSON.");
     const parsed = issueRequestSchema.safeParse(body);
     if (!parsed.success) {
+      await audit(db, {
+        entity: "request",
+        entityId: "issue",
+        action: "issue refused",
+        actor: context.get("actor"),
+        details: { code: "INVALID_REQUEST", problems: parsed.error.issues.length, ...originOf(context) },
+      });
       return problem(
         context,
         400,
@@ -207,11 +280,19 @@ export function createApp(services: Services, options: AppOptions = {}) {
       const { invoice, alreadyIssued } = await issue(db, store, settings, parsed.data, {
         actor: context.get("actor"),
         lookupTaxpayer: services.lookupTaxpayer,
+        context: originOf(context),
       });
       if (!alreadyIssued) options.afterIssue?.(invoice.id);
       return context.json({ alreadyIssued, invoice: await view(invoice) }, alreadyIssued ? 200 : 201);
     } catch (error) {
       if (error instanceof IssueRefused) {
+        await audit(db, {
+          entity: "request",
+          entityId: "issue",
+          action: "issue refused",
+          actor: context.get("actor"),
+          details: { code: error.code, message: error.message, buyer: parsed.data.buyer.name, ...originOf(context) },
+        });
         return problem(context, error.code === "REFERENCE_CONFLICT" ? 409 : 422, error.code, error.message);
       }
       throw error;
@@ -342,6 +423,7 @@ export function createApp(services: Services, options: AppOptions = {}) {
       const { invoice, alreadyIssued } = await storno(db, store, settings, row.id, {
         actor: context.get("actor"),
         note: body.data.note,
+        context: originOf(context),
       });
       if (!alreadyIssued) options.afterIssue?.(invoice.id);
       return context.json({ alreadyIssued, invoice: await view(invoice) }, alreadyIssued ? 200 : 201);
@@ -365,9 +447,81 @@ export function createApp(services: Services, options: AppOptions = {}) {
       entityId: row.id,
       action: "email resent",
       actor: context.get("actor"),
-      details: { to, outcome },
+      details: { to, outcome, ...originOf(context) },
     });
     return context.json({ outcome, to });
+  });
+
+  /** For an invoice sent by hand: who sent it, to whom, so the invoice says so. */
+  app.post("/v1/invoices/:id/sent-manually", async (context) => {
+    const row = await invoiceOr404(context);
+    if (!row) return problem(context, 404, "NOT_FOUND", "No such invoice.");
+    const body = z
+      .object({ to: z.email().max(254), note: noteSchema.optional() })
+      .strict()
+      .safeParse(await context.req.json().catch(() => ({})));
+    if (!body.success) return problem(context, 400, "INVALID_REQUEST", 'Give the address it was sent to: { "to": "…", "note"?: "…" }.');
+    await audit(db, {
+      entity: "invoice",
+      entityId: row.id,
+      action: "email sent manually",
+      actor: context.get("actor"),
+      details: { to: body.data.to, note: body.data.note, ...originOf(context) },
+    });
+    return context.json({ invoice: await view(row) });
+  });
+
+  /** Everything recorded about one invoice, oldest first. */
+  app.get("/v1/invoices/:id/history", async (context) => {
+    const row = await invoiceOr404(context);
+    if (!row) return problem(context, 404, "NOT_FOUND", "No such invoice.");
+    const entries = await db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.entity, "invoice"), eq(auditLog.entityId, row.id)))
+      .orderBy(auditLog.createdAt);
+    return context.json({ entries: entries.map(entryView) });
+  });
+
+  /** The activity log, newest first, filtered by person, action, kind or date. */
+  app.get("/v1/audit", async (context) => {
+    const query = z
+      .object({
+        actor: z.string().max(300).optional(),
+        action: z.string().max(100).optional(),
+        entity: z.string().max(40).optional(),
+        from: isoDate.optional(),
+        to: isoDate.optional(),
+        limit: z.coerce.number().int().min(1).max(200).default(100),
+        offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
+      })
+      .safeParse(context.req.query());
+    if (!query.success) return problem(context, 400, "INVALID_QUERY", "Check actor, action, entity, from, to, limit and offset.");
+    const { actor, action, entity, from, to, limit, offset } = query.data;
+    const where = and(
+      actor ? eq(auditLog.actor, actor) : undefined,
+      action ? eq(auditLog.action, action) : undefined,
+      entity ? eq(auditLog.entity, entity) : undefined,
+      from ? sql`${auditLog.createdAt} >= (${from}::date at time zone 'Europe/Budapest')` : undefined,
+      to ? sql`${auditLog.createdAt} < ((${to}::date + 1) at time zone 'Europe/Budapest')` : undefined,
+    );
+    const rows = await db
+      .select({ entry: auditLog, invoiceNumber: invoices.invoiceNumber })
+      .from(auditLog)
+      .leftJoin(invoices, and(eq(auditLog.entity, "invoice"), sql`${auditLog.entityId} = ${invoices.id}::text`))
+      .where(where)
+      .orderBy(desc(auditLog.createdAt))
+      .limit(limit)
+      .offset(offset);
+    const [total] = await db.select({ value: count() }).from(auditLog).where(where);
+    const actors = await db.selectDistinct({ actor: auditLog.actor }).from(auditLog).orderBy(auditLog.actor);
+    const actions = await db.selectDistinct({ action: auditLog.action }).from(auditLog).orderBy(auditLog.action);
+    return context.json({
+      total: total?.value ?? 0,
+      entries: rows.map(({ entry, invoiceNumber }) => ({ ...entryView(entry), invoiceNumber })),
+      actors: actors.map((one) => one.actor),
+      actions: actions.map((one) => one.action),
+    });
   });
 
   app.get("/v1/taxpayers/:taxNumber", async (context) => {
@@ -400,7 +554,7 @@ export function createApp(services: Services, options: AppOptions = {}) {
       entityId: "inspection",
       action: "inspection export",
       actor: context.get("actor"),
-      details: { selection, count: invoiceNumbers.length },
+      details: { selection, count: invoiceNumbers.length, ...originOf(context) },
     });
     return new Response(zip.slice().buffer as ArrayBuffer, {
       headers: {

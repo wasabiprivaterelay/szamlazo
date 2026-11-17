@@ -252,6 +252,20 @@ the invoice and issue a correct one.
 `to` is optional; without it, the invoice's own address. Returns
 `{ "outcome": "sent", "to": "…" }`. Recorded in the audit log.
 
+## Record an email sent by hand
+
+`POST /v1/invoices/{id}/sent-manually` with `{ "to": "vevo@example.hu", "note"?: "…" }`.
+Sends nothing: it records that the invoice was sent some other way, so the
+invoice (`manualEmail`) and the activity log say so.
+
+## Activity log
+
+`GET /v1/audit?actor=&action=&entity=&from=2026-11-01&to=2026-11-30&limit=100&offset=0`,
+newest first. Returns `{ "total", "entries": [ { "id", "at", "actor",
+"action", "entity", "entityId", "details", "invoiceNumber"? } ], "actors",
+"actions" }`. `GET /v1/invoices/{id}/history` returns one invoice's entries,
+oldest first. [ui.md](ui.md#the-activity-log) lists the events.
+
 ## Look up a tax number
 
 `GET /v1/taxpayers/{taxNumber}` with `12345678` or `12345678-2-41`.

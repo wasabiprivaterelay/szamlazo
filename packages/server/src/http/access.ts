@@ -12,6 +12,17 @@ import { webcrypto } from "node:crypto";
 
 type Jwk = webcrypto.JsonWebKey & { kid?: string };
 
+/** Who a valid Access token names, and when they logged in. */
+export type AccessPerson = {
+  email: string;
+  /** On UI_USERS. A person Access let in who is not on the list gets nothing. */
+  allowed: boolean;
+  /** Seconds since 1970: the login this token came from. */
+  issuedAt: number;
+  expiresAt: number;
+  country?: string;
+};
+
 export type AccessConfig = {
   teamDomain: string;
   audience: string;
@@ -55,8 +66,12 @@ export function accessVerifier(config: AccessConfig) {
     return keys.get(kid);
   }
 
-  /** The person's email when the token is good and the person is allowed, otherwise undefined. */
-  return async function verify(token: string | undefined): Promise<string | undefined> {
+  /**
+   * The person, when the token is good: `allowed` says whether they are on
+   * UI_USERS. Undefined for anything that is not a valid token for this
+   * application, including a service token, which names no person.
+   */
+  return async function verify(token: string | undefined): Promise<AccessPerson | undefined> {
     if (!token || token.length > 8192) return undefined;
     const parts = token.split(".");
     if (parts.length !== 3) return undefined;
@@ -74,7 +89,9 @@ export function accessVerifier(config: AccessConfig) {
         aud?: string | string[];
         exp?: number;
         nbf?: number;
+        iat?: number;
         email?: string;
+        country?: string;
       };
       const seconds = now() / 1000;
       const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
@@ -82,7 +99,14 @@ export function accessVerifier(config: AccessConfig) {
       if (typeof claims.exp !== "number" || claims.exp < seconds - 30) return undefined;
       if (typeof claims.nbf === "number" && claims.nbf > seconds + 30) return undefined;
       const email = claims.email?.toLowerCase();
-      return email && users.has(email) ? email : undefined;
+      if (!email) return undefined;
+      return {
+        email,
+        allowed: users.has(email),
+        issuedAt: typeof claims.iat === "number" ? claims.iat : 0,
+        expiresAt: claims.exp,
+        country: typeof claims.country === "string" ? claims.country.slice(0, 2) : undefined,
+      };
     } catch {
       return undefined;
     }

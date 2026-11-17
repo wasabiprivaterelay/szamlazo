@@ -136,6 +136,7 @@ async function main() {
           const { invoice, alreadyIssued } = await issue(db, services.store, services.settings, parsed.data, {
             actor: "cli",
             lookupTaxpayer: services.lookupTaxpayer,
+            context: { via: "cli" },
           });
           console.log(
             alreadyIssued

@@ -1,3 +1,4 @@
+import { audit } from "./audit.js";
 import { desc, eq } from "drizzle-orm";
 import {
   NavError,
@@ -200,6 +201,17 @@ export async function reportInvoice(
       errorMessage: error instanceof Error ? error.message : String(error),
       responseXml: navError?.body,
     });
+    await audit(db, {
+      entity: "invoice",
+      entityId: invoiceId,
+      action: "nav send failed",
+      actor: "system",
+      details: {
+        attempt: options.attempt ?? 1,
+        code: navError?.errorCode ?? "UNREACHABLE",
+        message: error instanceof Error ? error.message : String(error),
+      },
+    });
     return {
       status: "error",
       messages: [error instanceof Error ? error.message : String(error), ...(navError?.validations ?? [])],
@@ -208,13 +220,20 @@ export async function reportInvoice(
   }
 
   await record({ status: "sent", transactionId });
+  await audit(db, {
+    entity: "invoice",
+    entityId: invoiceId,
+    action: "nav sent",
+    actor: "system",
+    details: { transactionId, operation, attempt: options.attempt ?? 1 },
+  });
 
   const attempts = options.pollAttempts ?? 10;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     await new Promise((resolve) => setTimeout(resolve, options.pollIntervalMs ?? 2500));
     const verdict = await client.queryTransactionStatus(transactionId);
     if (!verdict.finished) continue;
-    const recorded = await recordVerdict(db, submission!.id, verdict);
+    const recorded = await recordVerdict(db, submission!.id, invoiceId, verdict);
     return {
       transactionId,
       ...recorded,
@@ -226,7 +245,7 @@ export async function reportInvoice(
   return { transactionId, status: "sent", messages: ["NAV has not decided yet"] };
 }
 
-async function recordVerdict(db: Database, submissionId: string, verdict: TransactionStatus) {
+async function recordVerdict(db: Database, submissionId: string, invoiceId: string, verdict: TransactionStatus) {
   const one = verdict.invoices[0]!;
   const warned = one.messages.some((message) => message.startsWith("WARN"));
   const status = one.status === "DONE" ? (warned ? "warning" : "done") : "error";
@@ -240,6 +259,13 @@ async function recordVerdict(db: Database, submissionId: string, verdict: Transa
       completedAt: new Date(),
     })
     .where(eq(navSubmissions.id, submissionId));
+  await audit(db, {
+    entity: "invoice",
+    entityId: invoiceId,
+    action: status === "done" ? "nav accepted" : status === "warning" ? "nav accepted with warnings" : "nav rejected",
+    actor: "system",
+    details: { messages: one.messages.length ? one.messages.join("\n") : undefined },
+  });
   return { status, messages: one.messages } as const;
 }
 
@@ -304,7 +330,7 @@ export async function advanceReport(
   if (latest.status === "sent" && latest.transactionId) {
     const verdict = await client.queryTransactionStatus(latest.transactionId);
     if (!verdict.finished) return { state: "waiting", reason: "NAV is still processing it" };
-    const recorded = await recordVerdict(db, latest.id, verdict);
+    const recorded = await recordVerdict(db, latest.id, invoiceId, verdict);
     return recorded.status === "error"
       ? { state: "rejected", messages: recorded.messages }
       : { state: "accepted", status: recorded.status };
@@ -330,7 +356,7 @@ export async function advanceReport(
       .set({ transactionId: stored.transactionId, status: "sent" })
       .where(eq(navSubmissions.id, latest.id));
     if (verdict.finished) {
-      const recorded = await recordVerdict(db, latest.id, verdict);
+      const recorded = await recordVerdict(db, latest.id, invoiceId, verdict);
       if (recorded.status !== "error") return { state: "accepted", status: recorded.status };
     }
     return { state: "waiting", reason: "found at NAV; waiting for its verdict" };

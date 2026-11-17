@@ -7,6 +7,7 @@ import type { Database } from "./db/client.js";
 import { alerts, emailLog, invoices, jobRuns, navSubmissions } from "./db/schema.js";
 import { budapestDate, budapestHour, monthBounds, previousMonth } from "./dates.js";
 import type { Attachment, Mailer } from "./email.js";
+import { audit } from "./audit.js";
 import { alertEmail, alertResolvedEmail, archiveEmail, invoiceEmail, type EmailBrand } from "./messages.js";
 import { advanceReport } from "./nav-reporting.js";
 import { sha256Of, type InvoiceStore } from "./storage.js";
@@ -116,12 +117,30 @@ async function sendOnce(
       .update(emailLog)
       .set({ status: "sent", providerMessageId: messageId, sentAt: now, lastError: null, updatedAt: now })
       .where(eq(emailLog.id, row.id));
+    if (entry.invoiceId) {
+      await audit(db, {
+        entity: "invoice",
+        entityId: entry.invoiceId,
+        action: "email sent",
+        actor: "system",
+        details: { to: entry.to, template: entry.template, copy: entry.key.includes(":copy:") || undefined },
+      });
+    }
     return "sent";
   } catch (error) {
     await db
       .update(emailLog)
       .set({ status: "failed", lastError: describe(error).slice(0, 1000), updatedAt: now })
       .where(eq(emailLog.id, row.id));
+    if (entry.invoiceId) {
+      await audit(db, {
+        entity: "invoice",
+        entityId: entry.invoiceId,
+        action: "email failed",
+        actor: "system",
+        details: { to: entry.to, attempt: row.attemptCount, error: describe(error) },
+      });
+    }
     deps.log.warn({ email: row.id, template: entry.template }, "email not sent");
     return "failed";
   }
@@ -301,6 +320,15 @@ export async function runChecks(deps: CheckerDeps): Promise<void> {
             .update(emailLog)
             .set({ status: "bounced", lastError: `${event.event}: ${event.reason ?? ""}`.trim(), updatedAt: now })
             .where(eq(emailLog.id, row.id));
+          if (row.invoiceId) {
+            await audit(db, {
+              entity: "invoice",
+              entityId: row.invoiceId,
+              action: "email bounced",
+              actor: "system",
+              details: { to: row.recipient, reason: `${event.event}: ${event.reason ?? ""}`.trim() },
+            });
+          }
         }
       }
     } catch (error) {

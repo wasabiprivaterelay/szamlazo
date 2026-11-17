@@ -1,4 +1,4 @@
-import { date, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { date, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 /**
@@ -132,12 +132,20 @@ export const jobRuns = pgTable("job_runs", {
 });
 
 /** Who did what, append-only like the invoices. */
-export const auditLog = pgTable("audit_log", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  entity: text("entity").notNull(),
-  entityId: text("entity_id").notNull(),
-  action: text("action").notNull(),
-  actor: text("actor").notNull(),
-  details: jsonb("details"),
-  createdAt,
-});
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    entity: text("entity").notNull(),
+    entityId: text("entity_id").notNull(),
+    action: text("action").notNull(),
+    actor: text("actor").notNull(),
+    details: jsonb("details"),
+    createdAt,
+  },
+  // The log is read newest first, and per invoice or per login.
+  (table) => [
+    index("audit_log_created_at").on(table.createdAt),
+    index("audit_log_entity").on(table.entity, table.entityId),
+  ],
+);

@@ -230,6 +230,8 @@ async function storeAndRecord(
     requestHash?: string;
     emailTo?: string;
     actor: string;
+    /** Where the request came from (address, country, web page or API), for the activity log. */
+    context?: Record<string, unknown>;
   },
 ) {
   const pdf = await renderInvoicePdf(invoice, { ...settings.pdf, createdAt: invoice.issueDate });
@@ -270,7 +272,14 @@ async function storeAndRecord(
     entityId: inserted!.id,
     action: row.type === "storno" ? "storno issued" : "invoice issued",
     actor: row.actor,
-    details: { invoiceNumber: invoice.invoiceNumber, totalGross: invoice.totalGross, reference: row.reference ?? null },
+    details: {
+      invoiceNumber: invoice.invoiceNumber,
+      totalGross: invoice.totalGross,
+      buyer: invoice.buyer.name,
+      reference: row.reference ?? null,
+      emailTo: row.emailTo ?? null,
+      ...row.context,
+    },
   });
   return inserted!;
 }
@@ -364,6 +373,7 @@ export async function issue(
     actor: string;
     lookupTaxpayer?: (taxNumber: string) => Promise<Taxpayer>;
     now?: Date;
+    context?: Record<string, unknown>;
   },
 ): Promise<IssuedInvoice> {
   const { today, fulfilment, due, lines } = planOf(request, settings, options.now ?? new Date());
@@ -413,6 +423,7 @@ export async function issue(
       requestHash: hash,
       emailTo: request.sendEmail ? request.buyer.email : undefined,
       actor: options.actor,
+      context: options.context,
     });
     return { invoice: row, alreadyIssued: false };
   });
@@ -438,7 +449,7 @@ export async function storno(
   store: InvoiceStore,
   settings: IssueSettings,
   invoiceId: string,
-  options: { actor: string; note?: string; now?: Date },
+  options: { actor: string; note?: string; now?: Date; context?: Record<string, unknown> },
 ): Promise<IssuedInvoice> {
   const today = dayOf(options.now ?? new Date());
 
@@ -486,6 +497,7 @@ export async function storno(
       originalInvoiceId: original.id,
       emailTo: original.emailTo ?? undefined,
       actor: options.actor,
+      context: { reverses: original.invoiceNumber, note: options.note, ...options.context },
     });
     return { invoice: row, alreadyIssued: false };
   });

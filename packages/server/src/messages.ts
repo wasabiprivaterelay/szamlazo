@@ -87,7 +87,7 @@ function invoiceHtml(parts: {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;font-family:${font};">
 ${
   parts.isTest
-    ? `<tr><td style="padding:10px 16px;margin-bottom:12px;background:#fff4d6;color:#7a5400;font-size:13px;border-radius:8px;">Ez egy teszt rendszerből küldött levél. A mellékelt számla nem valódi.</td></tr><tr><td style="height:12px;"></td></tr>`
+    ? `<tr><td style="padding:10px 16px;margin-bottom:12px;background:#fff4d6;color:#7a5400;font-size:13px;border-radius:8px;">Ez a levél tesztrendszerből érkezett. A csatolt számla nem valódi.</td></tr><tr><td style="height:12px;"></td></tr>`
     : ""
 }
 <tr><td style="background:#ffffff;border-radius:12px;border-top:4px solid ${accent};padding:32px 32px 28px;">
@@ -142,7 +142,7 @@ export function invoiceEmail(
           row("Sztornó számla száma", invoice.invoiceNumber, true),
           ...(invoice.reverses ? [row("Érvénytelenített számla", invoice.reverses)] : []),
         ],
-        note: "Erről a számláról nincs teendője. Ha már kifizette az eredeti számlát, keressen minket a visszatérítés miatt.",
+        note: "Ezzel a számlával kapcsolatban nincs teendője. Ha az eredeti számlát már kifizette, a visszatérítés ügyében keressen minket.",
         seller,
       }),
     };
@@ -156,7 +156,7 @@ export function invoiceEmail(
         seller.bankAccount ? `Bankszámlaszám: ${seller.bankAccount}` : undefined,
         `Közlemény: ${invoice.invoiceNumber}`,
       ]
-    : [`Fizetési mód: ${paymentMethodLabel(invoice.paymentMethod).toLowerCase()}`];
+    : [`Fizetés módja: ${paymentMethodLabel(invoice.paymentMethod).toLowerCase()}`];
   const intro = `Mellékelve küldjük a(z) ${invoice.invoiceNumber} számú számlát.`;
 
   return {
@@ -188,7 +188,7 @@ export function invoiceEmail(
             ...(seller.bankName ? [row("Bank", seller.bankName)] : []),
             row("Közlemény", invoice.invoiceNumber),
           ]
-        : [row("Számlaszám", invoice.invoiceNumber), row("Fizetési mód", paymentMethodLabel(invoice.paymentMethod))],
+        : [row("Számla sorszáma", invoice.invoiceNumber), row("Fizetés módja", paymentMethodLabel(invoice.paymentMethod))],
       note: transfer ? "Kérjük, az átutalás közleményében tüntesse fel a számla számát." : undefined,
       seller,
     }),
