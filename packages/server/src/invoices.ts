@@ -120,7 +120,7 @@ const buyerSchema = z
 
 export const issueRequestSchema = z
   .object({
-    /** The caller's own id for what is invoiced. The same reference twice returns the first invoice. */
+    /** The caller's own id for what is invoiced, never printed on the invoice. The same reference twice returns the first invoice. */
     reference: z
       .string()
       .trim()
@@ -370,7 +370,6 @@ export async function issue(
         dueDate: due,
         paymentMethod: request.paymentMethod,
         note: request.note,
-        orderNumber: request.reference,
       },
       { sequence: sequenceSourceFor(tx), numberFormat: settings.numberFormat },
     );
@@ -440,7 +439,6 @@ export async function storno(
         dueDate: day(original.dueDate),
         paymentMethod: original.paymentMethod,
         currency: original.currency,
-        orderNumber: original.reference ?? undefined,
       },
       {
         sequence: sequenceSourceFor(tx),
